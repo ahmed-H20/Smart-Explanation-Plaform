@@ -13,6 +13,11 @@ const {
 const ApiError = require("../utils/ApiError");
 const { generateToken } = require("../utils/generateToken");
 
+const documentName = {
+	Student: "Student",
+	Instructor: "Instructor",
+};
+
 //@desc resize images after multer upload image and filtering
 const resizeImages = asyncHandler(async (req, res, next) => {
 	const fileName = `instructor-${uuidv4()}-${Date.now()}.jpeg`;
@@ -32,27 +37,27 @@ const resizeImages = asyncHandler(async (req, res, next) => {
 // @desc create new User
 // @route POST /api/v1/:Users
 // @access private //DONE
-const createUser = (Model) => createDocument(Model, Model);
+const createUser = (Model) => createDocument(Model, Model.modelName);
 
 // @desc get all Users
 // @route GET /api/v1/:Users
 // @access private //DONE
-const getAllUser = (Model) => getAllDocuments(Model, Model);
+const getAllUser = (Model) => getAllDocuments(Model, Model.modelName);
 
 // @desc get one User
 // @route GET /api/v1/:Users/:id
 // @access private //DONE
-const getUserById = (Model) => getDocument(Model, Model);
+const getUserById = (Model) => getDocument(Model, Model.modelName);
 
 // @desc update one User
 // @route PATCH /api/v1/:Users/:id
 // @access private //DONE
-const updateUser = (Model) => updateDocument(Model, Model);
+const updateUser = (Model) => updateDocument(Model, Model.modelName);
 
 // @desc delete one User
 // @route DELETE /api/v1/:Users/:id
 // @access private //DONE
-const deleteUser = (Model) => deleteDocument(Model, Model);
+const deleteUser = (Model) => deleteDocument(Model, Model.modelName);
 
 // @desc update password
 // @route PUT api/v1/:users/changePassword/:id

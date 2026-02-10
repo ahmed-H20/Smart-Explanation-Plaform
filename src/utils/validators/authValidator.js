@@ -43,6 +43,8 @@ const signupStudentValidator = [
 		.withMessage("رقم الهاتف مطلوب")
 		.isMobilePhone("ar-EG")
 		.withMessage("من فضلك أدخل رقم هاتف مصري صحيح"),
+
+	validatorMiddleware,
 ];
 
 const loginValidator = [

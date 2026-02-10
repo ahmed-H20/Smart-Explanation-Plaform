@@ -190,8 +190,7 @@ const updateInstructorValidator = [
 	body("role").isEmpty().withMessage("ليس لديك الصلاحية لتعديل هذا"),
 
 	body("country")
-		.notEmpty()
-		.withMessage("الدولة مطلوبة")
+		.optional()
 		.isMongoId()
 		.withMessage("invalid county id")
 		.custom((countryId) => {

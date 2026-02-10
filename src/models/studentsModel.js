@@ -73,17 +73,15 @@ studentSchema.post("init", addImageURL);
 studentSchema.post("save", addImageURL);
 
 // Hash password
-studentSchema.pre("save", async function (next) {
+studentSchema.pre("save", async function () {
 	// If password  not modified, skip
-	if (!this.isModified("password")) return next();
+	if (!this.isModified("password")) return;
 
 	// Hash the new password
 	this.password = await bcrypt.hash(this.password, 12);
 
 	// Update passChangedAt to current time (minus 1 sec for token timing issues)
 	this.passChangedAt = Date.now() - 1000;
-
-	next();
 });
 
 const studentModel = mongoose.model("Student", studentSchema);
