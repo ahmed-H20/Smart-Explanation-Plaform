@@ -10,11 +10,11 @@ const {
 } = require("../controllers/majorsController");
 const instructorModel = require("../models/instructorsModel");
 const { protect, allowedTo } = require("../controllers/authController");
-// const {
-// 	createFieldValidator,
-// 	updateFieldValidator,
-// 	fieldIdValidator,
-// } = require("../utils/validators/fieldsValidator");
+const {
+	createMajorValidator,
+	updateMajorValidator,
+	getMajorIdValidator,
+} = require("../utils/validators/majorValidator");
 
 const router = express.Router({ mergeParams: true }); //to make nested routing
 
@@ -22,12 +22,17 @@ router.use(protect(instructorModel));
 
 router
 	.route("/")
-	.post(allowedTo("admin"), fieldIdFromNestedRoute, createMajor)
+	.post(
+		allowedTo("admin"),
+		fieldIdFromNestedRoute,
+		createMajorValidator,
+		createMajor,
+	)
 	.get(filterObject, getAllMajor);
 router
 	.route("/:id")
-	.get(getMajorById)
-	.patch(allowedTo("admin"), updateMajor)
-	.delete(allowedTo("admin"), deleteMajor);
+	.get(getMajorIdValidator, getMajorById)
+	.patch(allowedTo("admin"), updateMajorValidator, updateMajor)
+	.delete(allowedTo("admin"), getMajorIdValidator, deleteMajor);
 
 module.exports = router;
