@@ -16,8 +16,10 @@ const studentSchema = mongoose.Schema(
 			type: String,
 			required: [true, "faculty is required"],
 		},
-		specialization: {
-			type: String,
+		major: {
+			type: mongoose.Schema.ObjectId,
+			ref: "Major",
+			required: [true, "major is required"],
 		},
 		year: {
 			type: String,

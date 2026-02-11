@@ -35,9 +35,10 @@ const instructorsSchema = mongoose.Schema(
 			type: String,
 			required: [true, "faculty is required"],
 		},
-		specialization: {
-			type: String,
-			required: [true, "Instructor specialization is required"],
+		major: {
+			type: mongoose.Schema.ObjectId,
+			ref: "Major",
+			required: [true, "major is required"],
 		},
 		email: {
 			type: String,

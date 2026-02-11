@@ -5,6 +5,7 @@ const validatorMiddleware = require("../../middlewares/validatorMiddleware");
 const instructorModel = require("../../models/instructorsModel");
 const studentModel = require("../../models/studentsModel");
 const countryModel = require("../../models/countryModel");
+const majorModel = require("../../models/majorModel");
 
 /* 
 ==================
@@ -66,12 +67,21 @@ const createInstructorValidator = [
 		.isString()
 		.withMessage("اسم الكلية يجب أن يكون نص"),
 
-	// specialization
-	body("specialization")
+	// major
+	body("major")
 		.notEmpty()
-		.withMessage("برجاء إدخال التخصص")
-		.isString()
-		.withMessage("التخصص يجب أن يكون نص"),
+		.withMessage("التخصص مطلوب")
+		.isMongoId()
+		.withMessage("invalid major id")
+		.custom(async (majorId) => {
+			const major = await majorModel.findById(majorId);
+
+			if (!major) {
+				throw new Error("هذا التخصص غير موجودة");
+			}
+
+			return true;
+		}),
 
 	// email
 	body("email")
@@ -176,10 +186,19 @@ const updateInstructorValidator = [
 		.isString()
 		.withMessage("اسم الكلية يجب أن يكون نص"),
 
-	body("specialization")
+	body("major")
 		.optional()
-		.isString()
-		.withMessage("التخصص يجب أن يكون نص"),
+		.isMongoId()
+		.withMessage("invalid major id")
+		.custom(async (majorId) => {
+			const major = await majorModel.findById(majorId);
+
+			if (!major) {
+				throw new Error("هذا التخصص غير موجودة");
+			}
+
+			return true;
+		}),
 
 	body("email").optional().isEmail().withMessage("بريد إلكتروني غير صحيح"),
 
@@ -236,11 +255,21 @@ const createStudentValidator = [
 		.isString()
 		.withMessage("اسم الكلية يجب أن يكون نص"),
 
-	// specialization
-	body("specialization")
-		.optional()
-		.isString()
-		.withMessage("التخصص يجب أن يكون نص"),
+	// major
+	body("major")
+		.notEmpty()
+		.withMessage("التخصص مطلوب")
+		.isMongoId()
+		.withMessage("invalid major id")
+		.custom(async (majorId) => {
+			const major = await majorModel.findById(majorId);
+
+			if (!major) {
+				throw new Error("هذا التخصص غير موجودة");
+			}
+
+			return true;
+		}),
 
 	// year
 	body("year")
@@ -326,10 +355,19 @@ const updateStudentValidator = [
 		.isString()
 		.withMessage("اسم الكلية يجب أن يكون نص"),
 
-	body("specialization")
+	body("major")
 		.optional()
-		.isString()
-		.withMessage("التخصص يجب أن يكون نص"),
+		.isMongoId()
+		.withMessage("invalid major id")
+		.custom(async (majorId) => {
+			const major = await majorModel.findById(majorId);
+
+			if (!major) {
+				throw new Error("هذا التخصص غير موجودة");
+			}
+
+			return true;
+		}),
 
 	body("year")
 		.optional()
