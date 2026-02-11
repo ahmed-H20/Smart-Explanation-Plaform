@@ -5,6 +5,8 @@ const {
 	getMajorById,
 	updateMajor,
 	deleteMajor,
+	fieldIdFromNestedRoute,
+	filterObject,
 } = require("../controllers/majorsController");
 const instructorModel = require("../models/instructorsModel");
 const { protect, allowedTo } = require("../controllers/authController");
@@ -14,11 +16,14 @@ const { protect, allowedTo } = require("../controllers/authController");
 // 	fieldIdValidator,
 // } = require("../utils/validators/fieldsValidator");
 
-const router = express.Router();
+const router = express.Router({ mergeParams: true }); //to make nested routing
 
 router.use(protect(instructorModel));
 
-router.route("/").post(allowedTo("admin"), createMajor).get(getAllMajor);
+router
+	.route("/")
+	.post(allowedTo("admin"), fieldIdFromNestedRoute, createMajor)
+	.get(filterObject, getAllMajor);
 router
 	.route("/:id")
 	.get(getMajorById)

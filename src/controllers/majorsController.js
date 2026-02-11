@@ -7,6 +7,19 @@ const {
 } = require("./handlerFactory");
 const Model = require("../models/majorModel");
 
+// This fn for if u write category in body
+const fieldIdFromNestedRoute = (req, res, next) => {
+	if (req.params.fieldId || !req.body.field)
+		req.body.field = req.params.fieldId;
+	next();
+};
+// Nested route middleware
+const filterObject = (req, res, next) => {
+	const findObject = req.params.fieldId ? { field: req.params.fieldId } : {};
+	req.findObject = findObject;
+	next();
+};
+
 // @desc create new Major
 // @route POST /api/v1/major
 // @access private
@@ -38,4 +51,6 @@ module.exports = {
 	getMajorById,
 	updateMajor,
 	deleteMajor,
+	fieldIdFromNestedRoute,
+	filterObject,
 };
