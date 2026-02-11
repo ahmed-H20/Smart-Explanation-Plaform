@@ -12,12 +12,6 @@ const fieldSchema = mongoose.Schema(
 			type: String,
 			minlength: [20, "Too short Field description"],
 		},
-		majors: [
-			{
-				type: mongoose.Schema.ObjectId,
-				ref: "Major",
-			},
-		],
 	},
 	{
 		timestamps: true,
