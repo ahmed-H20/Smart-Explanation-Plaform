@@ -10,6 +10,7 @@ const StudentRoutes = require("./src/routes/studentsRoutes");
 const AuthRoutes = require("./src/routes/authRoutes");
 const CountryRoutes = require("./src/routes/countryRoutes");
 const FieldsRoutes = require("./src/routes/fieldRoutes");
+const MajorsRoutes = require("./src/routes/majorRoutes");
 
 // Create app
 const app = express();
@@ -28,6 +29,7 @@ app.use("/api/v1/students", StudentRoutes);
 app.use("/api/v1/auth", AuthRoutes);
 app.use("/api/v1/countries", CountryRoutes);
 app.use("/api/v1/fields", FieldsRoutes);
+app.use("/api/v1/majors", MajorsRoutes);
 
 // Not found route
 app.use((req, res, next) => {

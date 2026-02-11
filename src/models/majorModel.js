@@ -1,11 +1,11 @@
 const mongoose = require("mongoose");
 
-const fieldSchema = mongoose.Schema(
+const majorSchema = mongoose.Schema(
 	{
 		name: {
 			type: String,
 			trim: true,
-			required: [true, "field name is required"],
+			required: [true, "major name is required"],
 			unique: true,
 		},
 		field: {
@@ -19,5 +19,5 @@ const fieldSchema = mongoose.Schema(
 	},
 );
 
-const fieldModel = mongoose.model("Field", fieldSchema);
-module.exports = fieldModel;
+const majorModel = mongoose.model("major", majorSchema);
+module.exports = majorModel;
