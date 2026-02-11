@@ -31,14 +31,6 @@ const createFieldValidator = [
 		.isLength({ min: 20 })
 		.withMessage("الوصف قصير جدًا، يجب ألا يقل عن 20 حرف"),
 
-	// majors
-	body("majors")
-		.optional()
-		.isArray()
-		.withMessage("المجالات المرتبطة يجب أن تكون Array"),
-
-	body("majors.*").optional().isMongoId().withMessage("معرّف التخصص غير صحيح"),
-
 	validatorMiddleware,
 ];
 
@@ -69,10 +61,6 @@ const updateFieldValidator = [
 		.withMessage("الوصف يجب أن يكون نص")
 		.isLength({ min: 20 })
 		.withMessage("الوصف قصير جدًا، يجب ألا يقل عن 20 حرف"),
-
-	body("majors").optional().isArray().withMessage("التخصصات يجب أن تكون Array"),
-
-	body("majors.*").optional().isMongoId().withMessage("id التخصص غير صحيح"),
 
 	validatorMiddleware,
 ];

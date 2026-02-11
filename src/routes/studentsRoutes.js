@@ -25,11 +25,11 @@ const {
 const { uploadSingleImage } = require("../middlewares/uploadImagesMiddleware");
 const { allowedTo, protect } = require("../controllers/authController");
 const studentModel = require("../models/studentsModel");
+const instructorModel = require("../models/instructorsModel");
 
 const router = express.Router();
 
 router.use(protect(studentModel));
-
 router.get("/getMe", getLoggedUserData, getUserById(studentModel));
 router.put(
 	"/updateMyPassword",
@@ -43,6 +43,7 @@ router.put(
 );
 router.delete("/deleteMe", deleteLoggedUser(studentModel));
 
+router.use(protect(instructorModel));
 // Instructor CRUD
 router.use(allowedTo("admin"));
 router
@@ -66,7 +67,6 @@ router
 
 router.put(
 	"/changePassword/:id",
-	protect(studentModel),
 	allowedTo("instructor", "admin"),
 	changeUserPasswordValidator,
 	changeUserPassword(studentModel),

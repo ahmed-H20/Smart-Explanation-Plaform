@@ -117,14 +117,15 @@ const createInstructorValidator = [
 		.notEmpty()
 		.withMessage("الدولة مطلوبة")
 		.isMongoId()
-		.withMessage("invalid county id")
-		.custom((countryId) => {
-			countryModel.findById(countryId).then((result) => {
-				if (result) {
-					return Promise.reject(new Error("هذا الدولة غير موجودة"));
-				}
-				return true;
-			});
+		.withMessage("invalid country id")
+		.custom(async (countryId) => {
+			const country = await countryModel.findById(countryId);
+
+			if (!country) {
+				throw new Error("هذه الدولة غير موجودة");
+			}
+
+			return true;
 		}),
 
 	validatorMiddleware,
@@ -193,13 +194,14 @@ const updateInstructorValidator = [
 		.optional()
 		.isMongoId()
 		.withMessage("invalid county id")
-		.custom((countryId) => {
-			countryModel.findById(countryId).then((result) => {
-				if (result) {
-					return Promise.reject(new Error("هذا الدولة غير موجودة"));
-				}
-				return true;
-			});
+		.custom(async (countryId) => {
+			const country = await countryModel.findById(countryId);
+
+			if (!country) {
+				throw new Error("هذه الدولة غير موجودة");
+			}
+
+			return true;
 		}),
 
 	validatorMiddleware,
@@ -291,13 +293,14 @@ const createStudentValidator = [
 		.withMessage("الدولة مطلوبة")
 		.isMongoId()
 		.withMessage("invalid county id")
-		.custom((countryId) => {
-			countryModel.findById(countryId).then((result) => {
-				if (result) {
-					return Promise.reject(new Error("هذا الدولة غير موجودة"));
-				}
-				return true;
-			});
+		.custom(async (countryId) => {
+			const country = await countryModel.findById(countryId);
+
+			if (!country) {
+				throw new Error("هذه الدولة غير موجودة");
+			}
+
+			return true;
 		}),
 
 	validatorMiddleware,
@@ -337,23 +340,23 @@ const updateStudentValidator = [
 
 	body("phoneNumber")
 		.optional()
-		.isMobilePhone(["ar-EG"])
+		.isMobilePhone(["ar-EG", "ar-SA"])
 		.withMessage("رقم الهاتف غير صحيح"),
 
 	body("role").isEmpty().withMessage("role ليس لديك الصلاحية لتعديل"),
 
 	body("country")
-		.notEmpty()
-		.withMessage("الدولة مطلوبة")
+		.optional()
 		.isMongoId()
 		.withMessage("invalid county id")
-		.custom((countryId) => {
-			countryModel.findById(countryId).then((result) => {
-				if (result) {
-					return Promise.reject(new Error("هذا الدولة غير موجودة"));
-				}
-				return true;
-			});
+		.custom(async (countryId) => {
+			const country = await countryModel.findById(countryId);
+
+			if (!country) {
+				throw new Error("هذه الدولة غير موجودة");
+			}
+
+			return true;
 		}),
 
 	validatorMiddleware,
