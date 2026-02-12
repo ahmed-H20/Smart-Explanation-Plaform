@@ -1,0 +1,30 @@
+const express = require("express");
+const { protect, allowedTo } = require("../controllers/authController");
+const {
+	getLoggedUserWallet,
+	getLoggedUserBalance,
+	getLoggedUserFreezedBalance,
+	lockWallet,
+	unLockWallet,
+} = require("../controllers/walletController");
+
+const router = express.Router({ mergeParams: true }); //to make nested routing
+
+router.use(protect());
+
+router
+	// me (logged user) Routes
+	.get("/me", allowedTo("student", "instructor", "admin"), getLoggedUserWallet)
+	.get("/me/balance", allowedTo("student", "instructor"), getLoggedUserBalance)
+	.get(
+		"/me/freezedBalance",
+		allowedTo("student", "instructor"),
+		getLoggedUserFreezedBalance,
+	);
+
+router
+	// user wallet Routes
+	.put("/lock/:id", allowedTo("admin"), lockWallet)
+	.put("/unlock/:id", allowedTo("admin"), unLockWallet);
+
+module.exports = router;

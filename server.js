@@ -11,6 +11,7 @@ const AuthRoutes = require("./src/routes/authRoutes");
 const CountryRoutes = require("./src/routes/countryRoutes");
 const FieldsRoutes = require("./src/routes/fieldRoutes");
 const MajorsRoutes = require("./src/routes/majorRoutes");
+const WalletsRoutes = require("./src/routes/walletRoutes");
 
 // Create app
 const app = express();
@@ -30,6 +31,7 @@ app.use("/api/v1/auth", AuthRoutes);
 app.use("/api/v1/countries", CountryRoutes);
 app.use("/api/v1/fields", FieldsRoutes);
 app.use("/api/v1/majors", MajorsRoutes);
+app.use("/api/v1/wallets", WalletsRoutes);
 
 // Not found route
 app.use((req, res, next) => {

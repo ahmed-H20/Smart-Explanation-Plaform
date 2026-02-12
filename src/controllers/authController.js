@@ -7,6 +7,8 @@ const jwt = require("jsonwebtoken");
 const { generateToken } = require("../utils/generateToken");
 const ApiError = require("../utils/ApiError");
 const sendEmail = require("../utils/sendEmail");
+const studentModel = require("../models/studentsModel");
+const instructorModel = require("../models/instructorsModel");
 
 // @desc signup user
 // @route /api/v1/auth/:model/signup
@@ -44,7 +46,6 @@ const login = (Model) =>
 
 		// 2- check user from email
 		const user = await Model.findOne({ email }).select("+password");
-		console.log("pass", user);
 
 		// 3- check password correct
 		if (!user || !(await bcrypt.compare(password, user.password))) {
@@ -96,8 +97,19 @@ const protect = (Model) =>
 		// 2- check token valid
 		const decode = jwt.verify(token, process.env.JWT_SECRET_KEY);
 
-		// 3- check if user exist
-		const currentUser = await Model.findById(decode.id);
+		let currentUser;
+
+		if (!Model) {
+			const models = [studentModel, instructorModel];
+
+			const results = await Promise.all(
+				models.map((model) => model.findById(decode.id)),
+			);
+
+			currentUser = results.find(Boolean);
+		} else {
+			currentUser = await Model.findById(decode.id);
+		}
 
 		if (!currentUser) {
 			return next(

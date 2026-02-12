@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 
+const Country = require("./countryModel");
+const Wallet = require("./walletModel");
+
 const instructorsSchema = mongoose.Schema(
 	{
 		fullName: {
@@ -66,6 +69,10 @@ const instructorsSchema = mongoose.Schema(
 			enum: ["instructor", "admin"],
 			default: "instructor",
 		},
+		wallet: {
+			type: mongoose.Schema.ObjectId,
+			ref: "Wallet",
+		},
 		passChangedAt: Date,
 		passResetCode: String,
 		passResetCodeExpire: Date,
@@ -101,6 +108,27 @@ instructorsSchema.pre("save", async function () {
 	// Update passChangedAt to current time (minus 1 sec for token timing issues)
 	this.passChangedAt = Date.now() - 1000;
 });
+
+// Create User Wallet
+async function createWallet() {
+	if (!this.isNew) return;
+
+	// Get Country
+	const country = await Country.findById(this.country);
+	if (!country) {
+		return new Error("الدولة غير موجودة");
+	}
+
+	// Create Wallet
+	const wallet = await Wallet.create({
+		userId: this._id,
+		userType: "instructor",
+		currencyCode: country.currencyCode,
+	});
+
+	this.wallet = wallet._id;
+}
+instructorsSchema.pre("save", createWallet);
 
 const instructorModel = mongoose.model("Instructor", instructorsSchema);
 module.exports = instructorModel;

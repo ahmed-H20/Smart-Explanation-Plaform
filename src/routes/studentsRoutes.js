@@ -29,23 +29,32 @@ const instructorModel = require("../models/instructorsModel");
 
 const router = express.Router();
 
-router.use(protect(studentModel));
-router.get("/getMe", getLoggedUserData, getUserById(studentModel));
+router.get(
+	"/getMe",
+	protect(studentModel),
+	getLoggedUserData,
+	getUserById(studentModel),
+);
 router.put(
 	"/updateMyPassword",
+	protect(studentModel),
 	changeLoggedUserPasswordValidator,
 	updateLoggedUserPassword(studentModel),
 );
 router.put(
 	"/updateMe",
+	protect(studentModel),
 	updateLoggedUsersValidator,
 	updateLoggedUserData(studentModel),
 );
-router.delete("/deleteMe", deleteLoggedUser(studentModel));
+router.delete(
+	"/deleteMe",
+	protect(studentModel),
+	deleteLoggedUser(studentModel),
+);
 
-router.use(protect(instructorModel));
 // Instructor CRUD
-router.use(allowedTo("admin"));
+router.use(protect(instructorModel), allowedTo("admin"));
 router
 	.route("/")
 	.post(
