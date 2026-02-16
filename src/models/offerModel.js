@@ -21,8 +21,23 @@ const offerSchema = mongoose.Schema(
 		},
 
 		demoVideo: {
-			type: String,
-			required: [true, "Demo video link is required"],
+			assetId: {
+				type: String,
+			},
+
+			playbackId: {
+				type: String,
+			},
+
+			status: {
+				type: String,
+				enum: ["waiting", "processing", "ready", "failed"],
+				default: "waiting",
+			},
+
+			duration: Number,
+
+			uploadId: String,
 		},
 
 		price: {

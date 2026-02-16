@@ -1,6 +1,7 @@
 require("dotenv").config({ path: ".env" });
 const path = require("path");
 const express = require("express");
+const ngrok = require("@ngrok/ngrok");
 const morgan = require("morgan");
 const dbConnecting = require("./src/config/database");
 const GlobalError = require("./src/middlewares/errorMiddleware");
@@ -14,6 +15,7 @@ const MajorsRoutes = require("./src/routes/majorRoutes");
 const WalletsRoutes = require("./src/routes/walletRoutes");
 const TransactionRoutes = require("./src/routes/transactionRoutes");
 const RequestRoutes = require("./src/routes/requestRoutes");
+const OffersRoutes = require("./src/routes/offerRoutes");
 
 // Create app
 const app = express();
@@ -36,6 +38,7 @@ app.use("/api/v1/majors", MajorsRoutes);
 app.use("/api/v1/wallets", WalletsRoutes);
 app.use("/api/v1/transactions", TransactionRoutes);
 app.use("/api/v1/requests", RequestRoutes);
+app.use("/api/v1/offers", OffersRoutes);
 
 // Not found route
 app.use((req, res, next) => {
@@ -51,6 +54,15 @@ const port = process.env.PORT || 8000;
 const server = app.listen(port, () => {
 	console.log(`server running on ${port} 🚀 `);
 });
+
+// Get your endpoint online in dev mode
+if (process.env.NODE_ENV === "development") {
+	ngrok
+		.connect({ addr: process.env.PORT, authtoken_from_env: true })
+		.then((listener) =>
+			console.log(`Ingress established at: ${listener.url()}`),
+		);
+}
 
 // Global Error Handling Outside Express
 process.on("unhandledRejection", (err) => {
