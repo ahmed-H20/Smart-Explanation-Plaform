@@ -18,7 +18,7 @@ const {
 
 const router = express.Router({ mergeParams: true }); //to make nested routing
 
-router.use(protect(instructorModel));
+router.use(protect());
 
 router
 	.route("/")

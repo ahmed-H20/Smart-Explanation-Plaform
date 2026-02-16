@@ -9,7 +9,7 @@ const walletSchema = mongoose.Schema(
 		},
 		userType: {
 			type: String,
-			enum: ["student", "instructor"],
+			enum: ["Student", "Instructor"],
 			required: [true, "userType is required"],
 		},
 		balance: {

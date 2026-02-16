@@ -8,7 +8,7 @@ const {
 	unLockWallet,
 } = require("../controllers/walletController");
 
-const router = express.Router({ mergeParams: true }); //to make nested routing
+const router = express.Router();
 
 router.use(protect());
 

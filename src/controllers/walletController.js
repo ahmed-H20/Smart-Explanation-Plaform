@@ -68,7 +68,7 @@ const lockWallet = asyncHandler(async (req, res, next) => {
 	const { id } = req.params;
 
 	// 2- get wallet
-	const wallet = await Wallet.findOne({ userId: req.user._id });
+	const wallet = await Wallet.findOne({ userId: id });
 	if (!wallet) {
 		return next(new ApiError("This user not have a wallet!", 504));
 	}
@@ -92,7 +92,7 @@ const unLockWallet = asyncHandler(async (req, res, next) => {
 	const { id } = req.params;
 
 	// 2- get wallet
-	const wallet = await Wallet.findOne({ userId: req.user._id });
+	const wallet = await Wallet.findOne({ userId: id });
 	if (!wallet) {
 		return next(new ApiError("This user not have a wallet!", 504));
 	}

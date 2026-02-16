@@ -106,7 +106,7 @@ async function createWallet() {
 	// Create Wallet
 	const wallet = await Wallet.create({
 		userId: this._id,
-		userType: "student",
+		userType: "Student",
 		currencyCode: country.currencyCode,
 	});
 
