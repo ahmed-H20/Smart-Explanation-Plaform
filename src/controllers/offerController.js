@@ -58,9 +58,9 @@ const verifyMuxSignature = (req) => {
 
 const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	// check video is related to offer
-	if (!verifyMuxSignature(req)) {
-		return next(new ApiError("Invalid signature", 500));
-	}
+	// if (!verifyMuxSignature(req)) {
+	// 	return next(new ApiError("Invalid signature", 500));
+	// }
 
 	const event = req.body;
 

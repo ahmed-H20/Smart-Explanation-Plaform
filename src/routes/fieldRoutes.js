@@ -17,7 +17,7 @@ const MajorsRoutes = require("./majorRoutes");
 
 const router = express.Router();
 
-router.use(protect(instructorModel));
+router.use(protect());
 
 router.use("/:fieldId/majors", MajorsRoutes);
 

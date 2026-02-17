@@ -16,7 +16,7 @@ const {
 
 const router = express.Router();
 
-router.use(protect(instructorModel));
+router.use(protect());
 
 router
 	.route("/")
