@@ -42,25 +42,50 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 	});
 });
 
+/*
+ data: {
+      video_quality: 'basic',
+      upload_id: '7xNsFVBv3BLBjEBWiNVy8DA2a869hQPlg00qIzAJIa02Y',
+      tracks: [Array],
+      status: 'ready',
+      resolution_tier: '720p',
+      progress: [Object],
+      playback_ids: [Array],
+      mp4_support: 'none',
+      max_stored_resolution: 'SD',
+      max_stored_frame_rate: 30,
+      max_resolution_tier: '1080p',
+      master_access: 'none',
+      ingest_type: 'on_demand_direct_upload',
+      id: '7uZKqgULYdRy9h4fHqW9ptympOmh7oMMeiLmowl3iZw',
+      encoding_tier: 'baseline',
+      duration: 30.033333,
+      created_at: 1771395610,
+      aspect_ratio: '16:9'
+    },
+*/
+
 // webhook to success
 const verifyMuxSignature = (req) => {
 	const secret = process.env.MUX_WEBHOOK_SECRET;
-	const signature = req.headers["mux-signature"];
-	const payload = JSON.stringify(req.body);
+	const signatureHeader = req.headers["mux-signature"];
+
+	const parts = signatureHeader.split(",");
+	const signature = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "");
 
 	const hash = crypto
 		.createHmac("sha256", secret)
-		.update(payload)
+		.update(req.body) // raw body
 		.digest("hex");
 
 	return hash === signature;
 };
 
 const handleMuxWebhook = asyncHandler(async (req, res, next) => {
-	// check video is related to offer
-	// if (!verifyMuxSignature(req)) {
-	// 	return next(new ApiError("Invalid signature", 500));
-	// }
+	//check video is related to offer
+	if (!verifyMuxSignature(req)) {
+		return next(new ApiError("Invalid signature", 500));
+	}
 	console.log(req);
 
 	const event = req.body;
