@@ -12,10 +12,50 @@ const {
 const Model = require("../models/offerModel");
 const ApiError = require("../utils/ApiError");
 
+const verifyMuxSignature = (req) => {
+	const secret = process.env.MUX_WEBHOOK_SECRET;
+
+	console.log(secret);
+
+	const signatureHeader = req.headers["mux-signature"];
+
+	const parts = signatureHeader.split(",");
+	const signature = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "");
+
+	const hash = crypto
+		.createHmac("sha256", secret)
+		.update(req.body) // raw body
+		.digest("hex");
+
+	console.log("hash: ", hash);
+
+	console.log("signature: ", signature);
+
+	return hash === signature;
+};
+
 //@desc get url to upload video on Mux.com
 //@route /api/v1/offers/createUploadUrl
 //@access private instructor
 const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
+	const secret = process.env.MUX_WEBHOOK_SECRET;
+
+	console.log(secret);
+
+	const signatureHeader = req.headers["mux-signature"];
+
+	const parts = signatureHeader.split(",");
+	const signature = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "");
+
+	const hash = crypto
+		.createHmac("sha256", secret)
+		.update(req.body) // raw body
+		.digest("hex");
+
+	console.log("hash: ", hash);
+
+	console.log("signature: ", signature);
+
 	const request = await axios({
 		url: "https://api.mux.com/video/v1/uploads",
 		method: "post",
@@ -66,24 +106,6 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 */
 
 // webhook to success
-const verifyMuxSignature = (req) => {
-	const secret = process.env.MUX_WEBHOOK_SECRET;
-	const signatureHeader = req.headers["mux-signature"];
-
-	const parts = signatureHeader.split(",");
-	const signature = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "");
-
-	const hash = crypto
-		.createHmac("sha256", secret)
-		.update(req.body) // raw body
-		.digest("hex");
-
-	console.log("hash: ", hash);
-
-	console.log("signature: ", signature);
-
-	return hash === signature;
-};
 
 const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	//check video is related to offer
