@@ -13,6 +13,6 @@ const {
 
 const router = express.Router();
 
-router.get("/createUploadUrl", getUploadVideoUrl);
+router.get("/createUploadUrl/:offerId", getUploadVideoUrl);
 router.post("/mux_webhook", handleMuxWebhook);
 module.exports = router;

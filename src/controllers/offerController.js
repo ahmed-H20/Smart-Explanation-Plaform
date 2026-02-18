@@ -38,6 +38,8 @@ const verifyMuxSignature = (req) => {
 //@route /api/v1/offers/createUploadUrl
 //@access private instructor
 const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
+	const { offerId } = req.params;
+
 	const request = await axios({
 		url: "https://api.mux.com/video/v1/uploads",
 		method: "post",
@@ -49,6 +51,7 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 			cors_origin: "*",
 			new_asset_settings: {
 				playback_policies: ["signed"],
+				passthrough: offerId,
 				video_quality: "basic",
 			},
 		},
@@ -60,6 +63,8 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 			url: request.data.data.url,
 			uploadStatus: request.data.data.status,
 			id: request.data.data.id,
+			offerId: request.data.data.new_asset_settings.passthrough,
+			playback_policies: request.data.data.new_asset_settings.playback_policies,
 		},
 	});
 });
@@ -95,23 +100,6 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	// 	return next(new ApiError("Invalid signature", 500));
 	// // }
 	// console.log(req);
-	const secret = process.env.MUX_WEBHOOK_SECRET;
-
-	console.log(secret);
-
-	const signatureHeader = req.headers["mux-signature"];
-
-	const parts = signatureHeader.split(",");
-	const signature = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "");
-
-	const hash = crypto
-		.createHmac("sha256", secret)
-		.update(req.body) // raw body
-		.digest("hex");
-
-	console.log("hash: ", hash);
-
-	console.log("signature: ", signature);
 
 	const event = req.body;
 
