@@ -78,6 +78,10 @@ const verifyMuxSignature = (req) => {
 		.update(req.body) // raw body
 		.digest("hex");
 
+	console.log("hash: ", hash);
+
+	console.log("signature: ", signature);
+
 	return hash === signature;
 };
 
