@@ -193,10 +193,7 @@ const getAllOffers = getAllDocuments(Model, Model.modelName);
 const getLoggedInstructorOffers = asyncHandler(async (req, res, next) => {
 	const instructorId = req.user._id;
 
-	const offers = await Model.findOne({ instructor: instructorId });
-	if (!(offers.length > 0)) {
-		return next(new ApiError("cant find offer for this user", 504));
-	}
+	const offers = await Model.find({ instructor: instructorId });
 
 	res.status(200).json({
 		message: "success",

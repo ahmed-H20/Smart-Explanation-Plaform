@@ -37,12 +37,17 @@ router
 	.post(allowedTo("instructor"), createOffer)
 	.get(allowedTo("admin"), getAllOffers);
 
+router.get("/me", allowedTo("instructor"), getLoggedInstructorOffers);
+router
+	.route("/:id")
+	.get(getOffer)
+	.patch(allowedTo("instructor"), updateOffer)
+	.delete(allowedTo("admin"), deleteOffer);
 router.get(
 	"/:requestId",
 	allowedTo("student", "instructor"),
 	getOffersForRequest,
 );
-router.get("/me", allowedTo("instructor"), getLoggedInstructorOffers);
 router.patch("/:id/cancel", allowedTo("instructor"), cancelOffer);
 router.patch(
 	"/:id/accept",
@@ -51,11 +56,5 @@ router.patch(
 	fileLocalUpdate,
 	acceptOffer,
 );
-
-router
-	.route("/:id")
-	.get(getOffer)
-	.patch(allowedTo("instructor"), updateOffer)
-	.delete(allowedTo("admin"), deleteOffer);
 
 module.exports = router;
