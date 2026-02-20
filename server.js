@@ -16,6 +16,7 @@ const WalletsRoutes = require("./src/routes/walletRoutes");
 const TransactionRoutes = require("./src/routes/transactionRoutes");
 const RequestRoutes = require("./src/routes/requestRoutes");
 const OffersRoutes = require("./src/routes/offerRoutes");
+const { createMuxPlaybackTokens } = require("./src/utils/generateVedioToken");
 
 // Create app
 const app = express();
@@ -63,6 +64,12 @@ if (process.env.NODE_ENV === "development") {
 			console.log(`Ingress established at: ${listener.url()}`),
 		);
 }
+
+createMuxPlaybackTokens("q1W8SOLgfWMZqwIRhNB014qYH6jpc4iLfm9q1khoTe6o").then(
+	(resuilt) => {
+		console.log(resuilt);
+	},
+);
 
 // Global Error Handling Outside Express
 process.on("unhandledRejection", (err) => {

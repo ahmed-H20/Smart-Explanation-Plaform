@@ -26,20 +26,17 @@ const offerSchema = mongoose.Schema(
 			assetId: {
 				type: String,
 			},
-
 			playbackId: {
 				type: String,
 			},
-
 			status: {
 				type: String,
 				enum: ["waiting", "processing", "ready", "failed"],
 				default: "waiting",
 			},
-
 			duration: Number,
-
 			uploadUrl: String,
+			updatedAt: Date,
 		},
 
 		studentPrice: {

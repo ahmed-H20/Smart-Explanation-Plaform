@@ -81,6 +81,17 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 		},
 	});
 
+	const offer = await Model.findByIdAndUpdate(
+		offerId,
+		{
+			demoVideo: {
+				uploadUrl: request.data.data.url,
+				status: "waiting",
+			},
+		},
+		{ new: true },
+	);
+
 	res.status(200).json({
 		status: "success",
 		data: {
@@ -143,15 +154,20 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 		case "video.asset.ready":
 			offer.demoVideo.status = "ready";
 			offer.demoVideo.assetId = event.data.id;
+			offer.demoVideo.playbackId = event.playback_ids[0].id;
+			offer.demoVideo.duration = event.duration;
+			offer.demoVideo.updatedAt = new Date();
 			break;
 
 		case "video.asset.failed":
 			offer.demoVideo.status = "failed";
 			offer.demoVideo.assetId = null;
+			offer.demoVideo.updatedAt = new Date();
 			break;
 
 		case "video.uploading":
 			offer.demoVideo.status = "processing";
+			offer.demoVideo.updatedAt = new Date();
 			break;
 
 		default:
@@ -170,10 +186,10 @@ const createOffer = asyncHandler(async (req, res) => {
 	const offer = await Model.create({
 		request: req.body.request,
 		instructor: req.user._id,
-		demoVideo: {
-			uploadUrl: req.body.demoVideo.uploadUrl,
-			status: "waiting",
-		},
+		// demoVideo: {
+		// 	uploadUrl: req.body.demoVideo.uploadUrl,
+		// 	status: "waiting",
+		// },
 	});
 
 	res.status(201).json({

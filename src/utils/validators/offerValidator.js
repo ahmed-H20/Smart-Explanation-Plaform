@@ -40,8 +40,7 @@ const createOfferValidator = [
 
 	// demo video
 	body("demoVideo.uploadUrl")
-		.notEmpty()
-		.withMessage("demo video upload id is required ")
+		.optional()
 		.isString()
 		.withMessage("invalid uploadId"),
 
