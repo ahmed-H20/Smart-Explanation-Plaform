@@ -79,9 +79,8 @@ const offerSchema = mongoose.Schema(
 );
 
 //Not find deleted data
-offerSchema.pre(/^find/, function (next) {
+offerSchema.pre(/^find/, async function () {
 	this.find({ isDeleted: { $ne: true } });
-	next();
 });
 
 //Add full file url
