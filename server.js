@@ -65,11 +65,11 @@ if (process.env.NODE_ENV === "development") {
 		);
 }
 
-createMuxPlaybackTokens("q1W8SOLgfWMZqwIRhNB014qYH6jpc4iLfm9q1khoTe6o").then(
-	(resuilt) => {
-		console.log(resuilt);
-	},
-);
+// createMuxPlaybackTokens("q1W8SOLgfWMZqwIRhNB014qYH6jpc4iLfm9q1khoTe6o").then(
+// 	(resuilt) => {
+// 		console.log(resuilt);
+// 	},
+// );
 
 // Global Error Handling Outside Express
 process.on("unhandledRejection", (err) => {
