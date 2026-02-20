@@ -2,9 +2,19 @@ const express = require("express");
 const {
 	getUploadVideoUrl,
 	handleMuxWebhook,
+	createOffer,
+	getAllOffers,
+	getLoggedInstructorOffers,
+	getOffersForRequest,
+	getOffer,
+	updateOffer,
+	deleteOffer,
+	cancelOffer,
+	acceptOffer,
+	uploadFiles,
+	fileLocalUpdate,
 } = require("../controllers/offerController");
-// const instructorModel = require("../models/instructorsModel");
-// const { protect, allowedTo } = require("../controllers/authController");
+const { protect, allowedTo } = require("../controllers/authController");
 // const {
 // 	createCountryValidator,
 // 	updateCountryValidator,
@@ -12,7 +22,40 @@ const {
 // } = require("../utils/validators/countryValidator");
 
 const router = express.Router();
-
-router.get("/createUploadUrl/:offerId", getUploadVideoUrl);
 router.post("/mux_webhook", handleMuxWebhook);
+
+router.use(protect());
+
+router.get(
+	"/createUploadUrl/:offerId",
+	allowedTo("instructor"),
+	getUploadVideoUrl,
+);
+
+router
+	.route("/")
+	.post(allowedTo("instructor"), createOffer)
+	.get(allowedTo("admin"), getAllOffers);
+
+router.get(
+	"/:requestId",
+	allowedTo("student", "instructor"),
+	getOffersForRequest,
+);
+router.get("/me", allowedTo("instructor"), getLoggedInstructorOffers);
+router.patch("/:id/cancel", allowedTo("instructor"), cancelOffer);
+router.patch(
+	"/:id/accept",
+	allowedTo("student"),
+	uploadFiles,
+	fileLocalUpdate,
+	acceptOffer,
+);
+
+router
+	.route("/:id")
+	.get(getOffer)
+	.patch(allowedTo("instructor"), updateOffer)
+	.delete(allowedTo("admin"), deleteOffer);
+
 module.exports = router;

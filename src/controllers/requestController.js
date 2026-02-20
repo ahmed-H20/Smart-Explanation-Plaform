@@ -63,7 +63,7 @@ const createRequest = createDocument(Model, Model.modelName);
 
 // @desc get all Requests
 // @route GET /api/v1/Requests
-// @access private student //DONE
+// @access private student-instructor //DONE
 const getAllRequest = getAllDocuments(Model, Model.modelName);
 
 // @desc get one Request

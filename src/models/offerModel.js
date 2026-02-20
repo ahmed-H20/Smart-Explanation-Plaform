@@ -1,6 +1,9 @@
 const { request } = require("express");
 const mongoose = require("mongoose");
 
+const Request = require("./requestModel");
+const Instructor = require("./instructorsModel");
+
 const offerSchema = mongoose.Schema(
 	{
 		request: {
@@ -17,7 +20,6 @@ const offerSchema = mongoose.Schema(
 
 		estimateTime: {
 			type: Number,
-			required: [true, "Estimated time is required"], // بالايام
 		},
 
 		demoVideo: {
@@ -37,18 +39,20 @@ const offerSchema = mongoose.Schema(
 
 			duration: Number,
 
-			uploadId: String,
+			uploadUrl: String,
 		},
 
-		price: {
+		studentPrice: {
 			type: Number,
-			required: [true, "Price is required"],
+			// required: [true, "studentPrice is required"],
 		},
+
+		instructorPrice: Number,
 
 		status: {
 			type: String,
-			enum: ["pending", "accepted", "rejected", "completed"],
-			default: "pending",
+			enum: ["is-processing", "pending", "accepted", "rejected", "cancelled"],
+			default: "is-processing",
 		},
 
 		isDeleted: {
@@ -65,6 +69,8 @@ const offerSchema = mongoose.Schema(
 			type: String,
 			required: [true, "Instructor currency is required"],
 		},
+
+		allFiles: [String],
 	},
 	{
 		timestamps: true,
@@ -72,16 +78,45 @@ const offerSchema = mongoose.Schema(
 	},
 );
 
-// const addImageURL = (doc) => {
-// 	if (doc.demoFiles) {
-// 		doc.demoFiles = doc.demoFiles.map((file) => {
-// 			// لو already starts with http
-// 			if (file.startsWith("http")) return file;
-// 			return `${process.env.BASE_URL}/students/files/${file}`;
-// 		});
-// 	}
-// };
-// offerSchema.post("init", addImageURL);
-// offerSchema.post("save", addImageURL);
+//Not find deleted data
+offerSchema.pre(/^find/, function (next) {
+	this.find({ isDeleted: { $ne: true } });
+	next();
+});
+
+//Add full file url
+const addFileURL = (doc) => {
+	if (doc.allFiles) {
+		doc.allFiles = doc.allFiles.map((file) => {
+			// لو already starts with http
+			if (file.startsWith("http")) return file;
+			return `${process.env.BASE_URL}/students/files/${file}`;
+		});
+	}
+};
+offerSchema.post("init", addFileURL);
+offerSchema.post("save", addFileURL);
+
+//Add currency
+offerSchema.pre("validate", async function () {
+	// 1- get currencyCode from student
+	const requestDoc = await Request.findById(this.request).populate({
+		path: "student",
+		populate: {
+			path: "country",
+			select: "currencyCode",
+		},
+	});
+
+	// 2- get currencyCode from instructor
+	const instructorDoc = await Instructor.findById(this.instructor).populate({
+		path: "country",
+		select: "currencyCode",
+	});
+
+	// 3- add studentCurrency & instructorCurrency
+	this.studentCurrency = requestDoc.student.country.currencyCode;
+	this.instructorCurrency = instructorDoc.country.currencyCode;
+});
 
 module.exports = mongoose.model("Offer", offerSchema);
