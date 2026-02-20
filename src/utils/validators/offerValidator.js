@@ -48,68 +48,44 @@ const createOfferValidator = [
 ];
 
 // ── Update Offer ──────────────────────────────────────────────────────────────
-const updateOfferValidator = [
-	param("id")
-		.notEmpty()
-		.withMessage("معرّف العرض مطلوب")
-		.isMongoId()
-		.withMessage("معرّف العرض غير صحيح")
-		.custom(async (val, { req }) => {
-			const offer = await Offer.findById(val);
-			if (!offer) throw new Error("هذا العرض غير موجود");
+// const updateOfferValidator = [
+// 	param("id")
+// 		.notEmpty()
+// 		.withMessage("معرّف العرض مطلوب")
+// 		.isMongoId()
+// 		.withMessage("معرّف العرض غير صحيح")
+// 		.custom(async (val, { req }) => {
+// 			const offer = await Offer.findById(val);
+// 			if (!offer) throw new Error("هذا العرض غير موجود");
 
-			if (offer.instructor.toString() !== req.user._id.toString())
-				throw new Error("ليس لديك الصلاحية لتعديل هذا العرض");
+// 			if (offer.instructor.toString() !== req.user._id.toString())
+// 				throw new Error("ليس لديك الصلاحية لتعديل هذا العرض");
 
-			if (!["is-processing", "pending"].includes(offer.status))
-				throw new Error("لا يمكن تعديل عرض في هذه الحالة");
+// 			if (!["is-processing", "pending"].includes(offer.status))
+// 				throw new Error("لا يمكن تعديل عرض في هذه الحالة");
 
-			req.offerDoc = offer;
-			return true;
-		}),
+// 			req.offerDoc = offer;
+// 			return true;
+// 		}),
 
-	// body("estimateTime")
-	// .optional()
-	// .isNumeric()
-	// .withMessage("الوقت التقديري يجب أن يكون رقماً")
-	// .isFloat({ min: 1 })
-	// .withMessage("الوقت التقديري يجب أن يكون يوماً واحداً على الأقل"),
+// 	body("studentCurrency").not().exists(),
 
-	body("price")
-		.optional()
-		.isNumeric()
-		.withMessage("السعر يجب أن يكون رقماً")
-		.isFloat({ min: 0 })
-		.withMessage("السعر يجب أن يكون رقماً موجباً"),
+// 	body("instructorCurrency").not().exists(),
 
-	body("studentCurrency")
-		.optional()
-		.isString()
-		.withMessage("عملة الطالب يجب أن تكون نصاً")
-		.isLength({ min: 3, max: 3 })
-		.withMessage("رمز العملة يجب أن يكون 3 أحرف"),
+// 	body("status").not().exists().withMessage("لا يمكنك تعديل حالة العرض من هنا"),
 
-	body("instructorCurrency")
-		.optional()
-		.isString()
-		.withMessage("عملة المدرّس يجب أن تكون نصاً")
-		.isLength({ min: 3, max: 3 })
-		.withMessage("رمز العملة يجب أن يكون 3 أحرف"),
+// 	body("request")
+// 		.not()
+// 		.exists()
+// 		.withMessage("لا يمكنك تغيير الطلب المرتبط بالعرض"),
 
-	body("status").not().exists().withMessage("لا يمكنك تعديل حالة العرض من هنا"),
+// 	body("instructor")
+// 		.not()
+// 		.exists()
+// 		.withMessage("لا يمكنك تغيير المدرّس المرتبط بالعرض"),
 
-	body("request")
-		.not()
-		.exists()
-		.withMessage("لا يمكنك تغيير الطلب المرتبط بالعرض"),
-
-	body("instructor")
-		.not()
-		.exists()
-		.withMessage("لا يمكنك تغيير المدرّس المرتبط بالعرض"),
-
-	validatorMiddleware,
-];
+// 	validatorMiddleware,
+// ];
 
 // ── Get Single Offer ──────────────────────────────────────────────────────────
 const offerIdValidator = [
@@ -142,9 +118,9 @@ const getOffersForRequestValidator = [
 const cancelOfferValidator = [
 	param("id")
 		.notEmpty()
-		.withMessage("معرّف العرض مطلوب")
+		.withMessage("id العرض مطلوب")
 		.isMongoId()
-		.withMessage("معرّف العرض غير صحيح")
+		.withMessage("id العرض غير صحيح")
 		.custom(async (val, { req }) => {
 			const offer = await Offer.findById(val);
 			if (!offer) throw new Error("هذا العرض غير موجود");
@@ -154,6 +130,8 @@ const cancelOfferValidator = [
 
 			if (!["is-processing", "pending"].includes(offer.status))
 				throw new Error("لا يمكن إلغاء عرض في هذه الحالة");
+
+			console.log("validatin", offer);
 
 			req.offerDoc = offer;
 			return true;
@@ -170,32 +148,47 @@ const acceptOfferValidator = [
 		.isMongoId()
 		.withMessage("معرّف العرض غير صحيح")
 		.custom(async (val, { req }) => {
-			const offer = await Offer.findById(val);
-			if (!offer) throw new Error("هذا العرض غير موجود");
+			// Single DB call with populate
+			const offer = await Offer.findById(val).populate("request");
 
-			if (offer.status !== "pending")
+			if (!offer) {
+				throw new Error("العرض بهذا id غير موجود");
+			}
+
+			// Check offer status
+			if (!["is-processing", "pending"].includes(offer.status)) {
 				throw new Error("لا يمكن قبول عرض غير معلّق");
+			}
 
-			return true;
-		}),
+			if (!offer.request) {
+				throw new Error("الطلب المرتبط بهذا العرض غير موجود");
+			}
 
-	body("request")
-		.notEmpty()
-		.withMessage("معرّف الطلب مطلوب")
-		.isMongoId()
-		.withMessage("معرّف الطلب غير صحيح")
-		.custom(async (val, { req }) => {
-			const request = await Request.findById(val);
-			if (!request) throw new Error("هذا الطلب غير موجود");
+			// Check request ownership
+			if (offer.request.student.toString() !== req.user._id.toString()) {
+				throw new Error("ليس لديك الصلاحية لقبول هذا العرض");
+			}
 
-			if (request.student.toString() !== req.user._id.toString())
-				throw new Error("ليس لديك الصلاحية لقبول عرض على هذا الطلب");
-
-			if (request.status !== "open")
+			// Check request status
+			if (offer.request.status !== "open") {
 				throw new Error("لا يمكن قبول عرض على طلب غير مفتوح");
+			}
+
+			// Attach offer to request object to reuse in controller
+			req.offer = offer;
 
 			return true;
 		}),
+
+	body("allFiles")
+		.optional()
+		.isArray()
+		.withMessage("الملفات يجب أن تكون في صورة مصفوفة"),
+
+	body("allFiles.*")
+		.optional()
+		.isString()
+		.withMessage("كل ملف يجب أن يكون رابط نصي صحيح"),
 
 	validatorMiddleware,
 ];
@@ -238,13 +231,45 @@ const getUploadVideoUrlValidator = [
 	validatorMiddleware,
 ];
 
+const setEstimatedTimeAndPriceValidator = [
+	param("id")
+		.notEmpty()
+		.withMessage("id العرض مطلوب")
+		.isMongoId()
+		.withMessage("id العرض غير صحيح")
+		.custom(async (val, { req }) => {
+			const offer = await Offer.findById(val);
+			if (!offer) throw new Error("هذا العرض غير موجود");
+
+			if (offer.instructor.toString() !== req.user._id.toString())
+				throw new Error("ليس لديك الصلاحية للتعديل على هذا العرض");
+
+			if (!["accepted"].includes(offer.status))
+				throw new Error(
+					"لا يمكن تحديد عدد السعات والسعر قبل الموافقة على الطلب اولا",
+				);
+
+			req.offerDoc = offer;
+			return true;
+		}),
+
+	body("estimatedTime")
+		.notEmpty()
+		.withMessage("يجب ادخال عدد ساعات فديو الشرح")
+		.isFloat({ min: 1 })
+		.withMessage("عدد السعاعات يجب ان يكون رقم ولا يقل عن ساعة"),
+
+	validatorMiddleware,
+];
+
 module.exports = {
 	createOfferValidator,
-	updateOfferValidator,
+	// updateOfferValidator,
 	offerIdValidator,
 	getOffersForRequestValidator,
 	cancelOfferValidator,
 	acceptOfferValidator,
 	deleteOfferValidator,
 	getUploadVideoUrlValidator,
+	setEstimatedTimeAndPriceValidator,
 };

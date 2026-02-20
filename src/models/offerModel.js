@@ -18,7 +18,7 @@ const offerSchema = mongoose.Schema(
 			required: [true, "instructor id is required"],
 		},
 
-		estimateTime: {
+		estimatedTime: {
 			type: Number,
 		},
 
@@ -113,6 +113,23 @@ offerSchema.pre("validate", async function () {
 	// 3- add studentCurrency & instructorCurrency
 	this.studentCurrency = requestDoc.student.country.currencyCode;
 	this.instructorCurrency = instructorDoc.country.currencyCode;
+});
+
+// update numberOfOffers on request after saving an offer
+// eslint-disable-next-line prefer-arrow-callback
+offerSchema.post("save", async function (doc) {
+	// count offers related to this request
+	const offersCount = await mongoose.model("Offer").countDocuments({
+		request: doc.request,
+		isDeleted: false,
+	});
+
+	// update request with new numberOfOffers
+	await Request.findByIdAndUpdate(
+		doc.request,
+		{ numberOfOffers: offersCount },
+		{ new: true },
+	);
 });
 
 module.exports = mongoose.model("Offer", offerSchema);

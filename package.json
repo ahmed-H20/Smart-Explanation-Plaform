@@ -13,6 +13,7 @@
 	},
 	"dependencies": {
 		"@mux/mux-node": "^12.8.1",
+		"@mux/mux-uploader": "^1.4.1",
 		"@ngrok/ngrok": "^1.7.0",
 		"axios": "^1.13.5",
 		"bcrypt": "^6.0.0",

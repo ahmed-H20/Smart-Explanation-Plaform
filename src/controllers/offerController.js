@@ -15,6 +15,7 @@ const ApiError = require("../utils/ApiError");
 const Request = require("../models/requestModel");
 
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
+const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
 
 const uploadFiles = uploadMixOfFiles([
 	{
@@ -157,6 +158,7 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 			offer.demoVideo.playbackId = event.data.playback_ids[0].id;
 			offer.demoVideo.duration = event.data.duration;
 			offer.demoVideo.updatedAt = new Date();
+			offer.status = "pending";
 			break;
 
 		case "video.asset.failed":
@@ -181,7 +183,7 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 
 // @desc create offer
 // @route POST api/v1/offers
-// @access privet instructor
+// @access privet instructor //DONE
 const createOffer = asyncHandler(async (req, res) => {
 	const offer = await Model.create({
 		request: req.body.request,
@@ -200,12 +202,12 @@ const createOffer = asyncHandler(async (req, res) => {
 
 // @desc get all offers for admin
 // @route Get api/v1/offers
-// @access privet instructor
+// @access privet instructor //DONE
 const getAllOffers = getAllDocuments(Model, Model.modelName);
 
 // @desc get all offers for logged instructor
 // @route Get api/v1/offers/me
-// @access privet instructor
+// @access privet instructor //DONE
 const getLoggedInstructorOffers = asyncHandler(async (req, res, next) => {
 	const instructorId = req.user._id;
 
@@ -220,15 +222,15 @@ const getLoggedInstructorOffers = asyncHandler(async (req, res, next) => {
 
 // @desc get all offers for request
 // @route Get api/v1/offers/:requestId
-// @access privet instructor-student
+// @access privet instructor-student//DONE
 const getOffersForRequest = asyncHandler(async (req, res, next) => {
 	const { requestId } = req.params;
 
-	const requests = await Model.findOne({
+	const requests = await Model.find({
 		request: requestId,
 		status: { $ne: "cancelled" },
 	});
-	if (!(requests.length > 0)) {
+	if (requests.length === 0) {
 		return next(new ApiError("cant find offer for this user", 504));
 	}
 
@@ -241,8 +243,25 @@ const getOffersForRequest = asyncHandler(async (req, res, next) => {
 
 // @desc get one offers by id
 // @route Get api/v1/offers/:id
-// @access privet instructor-student
-const getOffer = getDocument(Model, Model.modelName);
+// @access privet instructor-student//DONE
+const getOffer = asyncHandler(async (req, res, next) => {
+	const { id } = req.params;
+	const offer = await Model.findById(id);
+	if (!offer) {
+		return next(
+			new ApiError(`cannot find ${Model.modelName} with id : ${id}`, 404),
+		);
+	}
+
+	let videoLinks;
+	if (offer.demoVideo.playbackId) {
+		videoLinks = await createMuxPlaybackTokens(offer.demoVideo.playbackId);
+	}
+
+	console.log(offer);
+
+	res.status(200).json({ data: offer, videoLinks: videoLinks });
+});
 
 // @desc update one offers by id
 // @route PATCH api/v1/offers/:id
@@ -251,7 +270,7 @@ const updateOffer = updateDocument(Model, Model.modelName);
 
 // @desc delete one offers by id
 // @route DELETE api/v1/offers/:id
-// @access privet admin
+// @access privet admin //DONE
 const deleteOffer = asyncHandler(async (req, res, next) => {
 	const { id } = req.params;
 
@@ -264,16 +283,17 @@ const deleteOffer = asyncHandler(async (req, res, next) => {
 	);
 
 	res.status(200).json({
-		message: "request is deleted",
-		data: request,
+		message: `offer:${id} is deleted`,
 	});
 });
 
 // @desc cancel one offers by id
-// @route PATCH api/v1/offers/:id/cancel
-// @access privet instructor
+// @route PATCH api/v1/offers/cancel/:id
+// @access privet instructor //DONE
 const cancelOffer = asyncHandler(async (req, res, next) => {
 	const offer = req.offerDoc;
+
+	console.log(offer);
 
 	offer.status = "cancelled";
 
@@ -287,32 +307,50 @@ const cancelOffer = asyncHandler(async (req, res, next) => {
 
 // @desc accept one offers by id
 // @route PATCH api/v1/offers/:id/accept
-// @access privet student
+// @access privet student //DONE
 const acceptOffer = asyncHandler(async (req, res, next) => {
-	const { request } = req.body;
-	const { id } = req.params;
+	const { offer } = req; // already fetched in validator
 
-	// set all offers rejected except one offer which accepted
 	await Model.updateMany(
-		{ request, _id: { $ne: id } },
+		{ request: offer.request._id, _id: { $ne: offer._id } },
 		{ $set: { status: "rejected" } },
 	);
 
-	// accept offer //TODO: save all files
-	const acceptedOffer = await Model.findByIdAndUpdate(
-		id,
-		{ $set: { status: "accepted", allFiles: req.body.allFiles } },
-		{ new: true },
-	);
+	offer.status = "accepted";
+	offer.allFiles = req.body.allFiles || [];
+	await offer.save();
 
-	if (!acceptedOffer) {
-		return res.status(404).json({ message: "Offer not found" });
-	}
-
-	res.status(200).json({ message: "Offer accepted", offer: acceptedOffer });
+	res.status(200).json({
+		message: "Offer accepted",
+		offer,
+	});
 });
 
-// estmated time for accepted offer -> price
+// @desc Set offer price
+// @route PATCH api/v1/offers/:id/estimatedTimeAndPrice
+// @access privet instructor
+const setEstimatedTimeAndPrice = asyncHandler(async (req, res, next) => {
+	const { estimatedTime } = req.body;
+
+	const offer = req.offerDoc;
+
+	const studentPrice =
+		offer.studentCurrency === "SAR" ? estimatedTime * 40 : estimatedTime * 200;
+
+	const instructorPrice =
+		offer.instructorCurrency === "SAR"
+			? estimatedTime * 40
+			: estimatedTime * 200;
+
+	offer.instructorPrice = instructorPrice;
+	offer.studentPrice = studentPrice;
+	offer.estimatedTime = estimatedTime;
+
+	await offer.save();
+
+	res.status(200).json({ message: "offer price set", offer: offer });
+});
+// 1 hour -> 40SA -> 200LE
 
 // create order
 
@@ -330,4 +368,5 @@ module.exports = {
 	acceptOffer,
 	uploadFiles,
 	fileLocalUpdate,
+	setEstimatedTimeAndPrice,
 };

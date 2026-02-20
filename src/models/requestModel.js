@@ -66,4 +66,4 @@ const addImageURL = (doc) => {
 requestSchema.post("init", addImageURL);
 requestSchema.post("save", addImageURL);
 
-module.exports = mongoose.model("request", requestSchema);
+module.exports = mongoose.model("Request", requestSchema);
