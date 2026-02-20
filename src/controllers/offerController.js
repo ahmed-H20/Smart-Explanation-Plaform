@@ -154,8 +154,8 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 		case "video.asset.ready":
 			offer.demoVideo.status = "ready";
 			offer.demoVideo.assetId = event.data.id;
-			offer.demoVideo.playbackId = event.playback_ids[0].id;
-			offer.demoVideo.duration = event.duration;
+			offer.demoVideo.playbackId = event.data.playback_ids[0].id;
+			offer.demoVideo.duration = event.data.duration;
 			offer.demoVideo.updatedAt = new Date();
 			break;
 
