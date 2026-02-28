@@ -9,6 +9,7 @@ const Wallet = require("../models/walletModel");
 const Offer = require("../models/offerModel");
 const ApiError = require("../utils/ApiError");
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
+const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
 
 // *********** CREATE AND GET ORDERS **************
 
@@ -198,8 +199,8 @@ const uploadQuizzes = asyncHandler(async (req, res, next) => {
 // *********** UPLOAD VIDEOS **************
 
 //@desc get url to upload video on Mux.com
-//@route /api/v1/orders/createUploadUrl
-//@access private instructor
+//@route GET /api/v1/orders/createUploadUrl
+//@access private instructor //DONE
 const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 	const { orderId } = req.params;
 
@@ -244,14 +245,12 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 });
 
 //@desc get webhook to success
-//@route POST api/v1/orders/mux_webhook
+//@route POST api/v1/orders/mux_webhook //DONE
 const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	//check video is related to offer
 	// if (!verifyMuxSignature(req)) {
 	// 	return next(new ApiError("Invalid signature", 500));
 	// // }
-	console.log(req.body);
-
 	const event = req.body;
 
 	// get offerId from passthrough
@@ -267,34 +266,78 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	}
 
 	// update video status
+	// prepare new video object from event
+	const newVideo = {
+		status: "waiting",
+		assetId: null,
+		playbackId: null,
+		duration: null,
+		uploadUrl: event.data.passthrough,
+		updatedAt: new Date(),
+	};
+
+	// update fields based on event type
 	switch (event.type) {
 		case "video.asset.ready":
-			order.videos.status = "ready";
-			order.videos.assetId = event.data.id;
-			order.videos.playbackId = event.data.playback_ids[0].id;
-			order.videos.duration = event.data.duration;
-			order.videos.updatedAt = new Date();
-			order.status = "submitted";
+			newVideo.status = "ready";
+			newVideo.assetId = event.data.id;
+			newVideo.playbackId = event.data.playback_ids[0].id;
+			newVideo.duration = event.data.duration;
+			order.status = "submitted"; // mark order submitted
 			break;
 
 		case "video.asset.failed":
-			order.videos.status = "failed";
-			order.videos.assetId = null;
-			order.videos.updatedAt = new Date();
+			newVideo.status = "failed";
 			break;
 
 		case "video.uploading":
-			order.videos.status = "processing";
-			order.videos.updatedAt = new Date();
+			newVideo.status = "processing";
 			break;
 
 		default:
 			break;
 	}
 
+	// push new video to order.videos array
+	order.videos.push(newVideo);
+
 	await order.save();
 
 	return res.status(200).json({ message: "Webhook processed" });
+});
+
+//@desc get video with token
+//@route GET /api/v1/orders/videos
+//@access private all
+const getLoggedUserVideos = asyncHandler(async (req, res, next) => {
+	//1- get logged student order
+	let order;
+	const { role } = req.user;
+	if (role === "student") {
+		order = await Model.findOne({ student: req.user._id });
+	} else if (role === "instructor") {
+		order = await Model.findOne({ instructor: req.user._id });
+	} else {
+		return next(new ApiError("غير مصرح لك", 403));
+	}
+
+	console.log(order);
+
+	//2- process videos
+	let videos = [];
+	if (order.videos && order.videos.length > 0) {
+		// Generate playback tokens for all videos in parallel
+		videos = await Promise.all(
+			order.videos.map((video) => createMuxPlaybackTokens(video.playbackId)),
+		);
+	}
+
+	//3- res
+	res.status(200).json({
+		status: "success",
+		numberOfVideos: videos.length,
+		data: videos,
+	});
 });
 
 // *********** FINISH AND COMPLETE **************
@@ -406,4 +449,5 @@ module.exports = {
 	finishAndSubmitOrder,
 	fileLocalUpdate,
 	uploadFiles,
+	getLoggedUserVideos,
 };

@@ -11,6 +11,7 @@ const {
 	uploadQuizzes,
 	handleMuxWebhook,
 	getUploadVideoUrl,
+	getLoggedUserVideos,
 } = require("../controllers/orderController");
 const {
 	createOrderValidator,
@@ -31,6 +32,13 @@ router.get(
 	allowedTo("instructor"),
 	getUploadVideoUrlValidator,
 	getUploadVideoUrl,
+);
+
+router.get(
+	"/getMyVideos",
+	protect(),
+	allowedTo("student", "instructor"),
+	getLoggedUserVideos,
 );
 
 router.get(

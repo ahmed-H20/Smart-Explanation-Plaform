@@ -54,22 +54,24 @@ const orderSchema = mongoose.Schema(
 			type: Date,
 			required: [true, "deadline is required"],
 		},
-		videos: {
-			assetId: {
-				type: String,
+		videos: [
+			{
+				assetId: {
+					type: String,
+				},
+				playbackId: {
+					type: String,
+				},
+				status: {
+					type: String,
+					enum: ["waiting", "processing", "ready", "failed"],
+					default: "waiting",
+				},
+				duration: Number,
+				uploadUrl: String,
+				updatedAt: Date,
 			},
-			playbackId: {
-				type: String,
-			},
-			status: {
-				type: String,
-				enum: ["waiting", "processing", "ready", "failed"],
-				default: "waiting",
-			},
-			duration: Number,
-			uploadUrl: String,
-			updatedAt: Date,
-		},
+		],
 		documents: [String],
 		quizzes: [String],
 		paidAt: Date,
