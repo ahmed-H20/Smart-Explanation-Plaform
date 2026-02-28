@@ -25,6 +25,8 @@ const transactionsSchema = mongoose.Schema(
 			type: String,
 			enum: [
 				"order_payment",
+				"order_completed",
+				"order_create",
 				"order_refund",
 				"platform_profit",
 				"withdraw",

@@ -8,7 +8,6 @@ const uploadOptions = () => {
 			cb(null, "upload/students/files");
 		}, // function to add distension to cb function, null main no errors (ask chat gpt to understand)
 		filename: (req, file, cb) => {
-			console.log(req.user);
 			const extinction = file.mimetype.split("/")[1];
 			const fileName = `file-${req.user.fullName}-${uuidv4()}.${extinction}`;
 			cb(null, fileName);

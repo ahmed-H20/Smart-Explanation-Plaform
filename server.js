@@ -16,6 +16,7 @@ const WalletsRoutes = require("./src/routes/walletRoutes");
 const TransactionRoutes = require("./src/routes/transactionRoutes");
 const RequestRoutes = require("./src/routes/requestRoutes");
 const OffersRoutes = require("./src/routes/offerRoutes");
+const OrderRoutes = require("./src/routes/orderRoutes");
 const { createMuxPlaybackTokens } = require("./src/utils/generateVedioToken");
 
 // Create app
@@ -40,6 +41,7 @@ app.use("/api/v1/wallets", WalletsRoutes);
 app.use("/api/v1/transactions", TransactionRoutes);
 app.use("/api/v1/requests", RequestRoutes);
 app.use("/api/v1/offers", OffersRoutes);
+app.use("/api/v1/orders", OrderRoutes);
 
 // Not found route
 app.use((req, res, next) => {
@@ -57,19 +59,19 @@ const server = app.listen(port, () => {
 });
 
 // Get your endpoint online in dev mode
-if (process.env.NODE_ENV === "development") {
-	ngrok
-		.connect({ addr: process.env.PORT, authtoken_from_env: true })
-		.then((listener) =>
-			console.log(`Ingress established at: ${listener.url()}`),
-		);
+// if (process.env.NODE_ENV === "development") {
+// 	ngrok
+// 		.connect({ addr: process.env.PORT, authtoken_from_env: true })
+// 		.then((listener) =>
+// 			console.log(`Ingress established at: ${listener.url()}`),
+// 		);
 
-	// createMuxPlaybackTokens("siuBcAWgenpHmhyCtb5GQZh8U65b8HhA00j27Kj5A5ns").then(
-	// 	(result) => {
-	// 		console.log(result);
-	// 	},
-	// );
-}
+// 	// createMuxPlaybackTokens("siuBcAWgenpHmhyCtb5GQZh8U65b8HhA00j27Kj5A5ns").then(
+// 	// 	(result) => {
+// 	// 		console.log(result);
+// 	// 	},
+// 	// );
+// }
 
 // Global Error Handling Outside Express
 process.on("unhandledRejection", (err) => {

@@ -127,7 +127,6 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	// if (!verifyMuxSignature(req)) {
 	// 	return next(new ApiError("Invalid signature", 500));
 	// // }
-	console.log(req);
 
 	const event = req.body;
 
