@@ -3,6 +3,8 @@ const Mux = require("@mux/mux-node");
 const mux = new Mux();
 
 async function createMuxPlaybackTokens(playbackId) {
+	if (!playbackId) return;
+
 	// Set some base options we can use for a few different signing types
 	// Type can be either video, thumbnail, gif, or storyboard
 	const baseOptions = {

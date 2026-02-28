@@ -221,17 +221,6 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 		},
 	});
 
-	const order = await Model.findByIdAndUpdate(
-		orderId,
-		{
-			videos: {
-				uploadUrl: request.data.data.url,
-				status: "waiting",
-			},
-		},
-		{ new: true },
-	);
-
 	res.status(200).json({
 		status: "success",
 		data: {
@@ -299,7 +288,9 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	}
 
 	// push new video to order.videos array
-	order.videos.push(newVideo);
+	if (newVideo.status === "ready") {
+		order.videos.push(newVideo);
+	}
 
 	await order.save();
 
@@ -327,9 +318,11 @@ const getLoggedUserVideos = asyncHandler(async (req, res, next) => {
 	let videos = [];
 	if (order.videos && order.videos.length > 0) {
 		// Generate playback tokens for all videos in parallel
-		videos = await Promise.all(
+		const results = await Promise.all(
 			order.videos.map((video) => createMuxPlaybackTokens(video.playbackId)),
 		);
+
+		videos = results.filter(Boolean);
 	}
 
 	//3- res
@@ -365,9 +358,11 @@ const finishAndSubmitOrder = asyncHandler(async (req, res, next) => {
 
 		// 3️⃣ check uploads completed
 		if (
-			order.videoLinks.status !== "ready" ||
+			!order.videos ||
+			order.videos.length === 0 ||
 			!order.documents ||
-			order.documents.length === 0
+			order.documents.length === 0 ||
+			!order.videos.every((video) => video.status === "ready")
 		) {
 			throw new ApiError("Videos or documents not uploaded yet", 400);
 		}

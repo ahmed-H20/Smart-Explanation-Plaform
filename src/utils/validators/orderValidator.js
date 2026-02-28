@@ -62,7 +62,7 @@ const finishAndSubmitOrderValidator = [
 			}
 
 			// Check if order is in correct status
-			if (order.status !== "in_progress") {
+			if (!["in_progress", "submitted"].includes(order.status)) {
 				throw new Error("لا يمكن إنهاء الطلب في حالته الحالية");
 			}
 
