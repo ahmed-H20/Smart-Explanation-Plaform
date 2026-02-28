@@ -6,6 +6,7 @@ const {
 	getLoggedUserFreezedBalance,
 	lockWallet,
 	unLockWallet,
+	chargeWalletManually,
 } = require("../controllers/walletController");
 
 const router = express.Router();
@@ -26,5 +27,7 @@ router
 	// user wallet Routes
 	.put("/lock/:id", allowedTo("admin"), lockWallet)
 	.put("/unlock/:id", allowedTo("admin"), unLockWallet);
+
+router.put("/manualCharge/:id", allowedTo("admin"), chargeWalletManually);
 
 module.exports = router;

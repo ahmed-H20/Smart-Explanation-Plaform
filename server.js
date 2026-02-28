@@ -18,6 +18,7 @@ const RequestRoutes = require("./src/routes/requestRoutes");
 const OffersRoutes = require("./src/routes/offerRoutes");
 const OrderRoutes = require("./src/routes/orderRoutes");
 const { createMuxPlaybackTokens } = require("./src/utils/generateVedioToken");
+const sendEmail = require("./src/utils/sendEmail");
 
 // Create app
 const app = express();

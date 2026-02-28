@@ -12,6 +12,8 @@ const {
 	handleMuxWebhook,
 	getUploadVideoUrl,
 	getLoggedUserVideos,
+	cancelOrder,
+	deleteOrder,
 } = require("../controllers/orderController");
 const {
 	createOrderValidator,
@@ -47,6 +49,9 @@ router.get(
 	allowedTo("student", "instructor"),
 	getLoggedUserOrders,
 );
+
+router.put("/cancel/:id", protect(), allowedTo("student"), cancelOrder);
+router.delete("/delete/:id", protect(), allowedTo("admin"), deleteOrder);
 
 router
 	.route("/")

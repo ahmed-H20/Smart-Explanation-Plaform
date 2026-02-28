@@ -1,6 +1,8 @@
 const asyncHandler = require("express-async-handler");
+const mongoose = require("mongoose");
 
 const Wallet = require("../models/walletModel");
+const Transaction = require("../models/transactionsModel");
 const ApiError = require("../utils/ApiError");
 
 // @desc get logged user wallet
@@ -108,12 +110,74 @@ const unLockWallet = asyncHandler(async (req, res, next) => {
 	});
 });
 
+// @desc charge wallet manually
+// @route PUT /wallet/charge/:id
+// @access private (admin)
+const chargeWalletManually = asyncHandler(async (req, res, next) => {
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		// 1️⃣ get id and balance
+		const { id } = req.params;
+		const { balance } = req.body;
+
+		if (!balance || Number.isNaN(balance) || balance <= 0) {
+			throw new ApiError("المبلغ يجب أن يكون رقم موجب", 400);
+		}
+
+		// 2️⃣ get wallet
+		const wallet = await Wallet.findById(id).session(session);
+		if (!wallet) {
+			throw new ApiError("المحفظة غير موجودة", 404);
+		}
+
+		const balanceBefore = wallet.balance;
+
+		// 3️⃣ update wallet balance
+		wallet.balance += Number(balance);
+		await wallet.save({ session });
+
+		// 4️⃣ create transaction record
+		await Transaction.create(
+			[
+				{
+					wallet: wallet._id,
+					type: "credit",
+					status: "completed",
+					amount: balance,
+					reason: "manual_charge_by_admin",
+					referenceId: wallet._id,
+					referenceModel: "Wallet",
+					balanceBefore,
+					balanceAfter: wallet.balance,
+				},
+			],
+			{ session },
+		);
+
+		await session.commitTransaction();
+		session.endSession();
+
+		// 5️⃣ response
+		res.status(200).json({
+			message: "تم شحن المحفظة بنجاح",
+			data: wallet,
+		});
+	} catch (err) {
+		await session.abortTransaction();
+		session.endSession();
+		return next(err);
+	}
+});
+
 module.exports = {
 	getLoggedUserWallet,
 	getLoggedUserBalance,
 	getLoggedUserFreezedBalance,
 	lockWallet,
 	unLockWallet,
+	chargeWalletManually,
 };
 
 /*

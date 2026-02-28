@@ -26,8 +26,10 @@ const transactionsSchema = mongoose.Schema(
 			enum: [
 				"order_payment",
 				"order_completed",
+				"order_cancelled",
 				"order_create",
 				"order_refund",
+				"manual_charge_by_admin",
 				"platform_profit",
 				"withdraw",
 				"deposit",

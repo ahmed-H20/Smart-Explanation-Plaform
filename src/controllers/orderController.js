@@ -10,6 +10,11 @@ const Offer = require("../models/offerModel");
 const ApiError = require("../utils/ApiError");
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
 const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
+const sendEmail = require("../utils/sendEmail");
+const {
+	instructorCreateOrder,
+	studentCreateOrder,
+} = require("../utils/emailTemplates");
 
 // *********** CREATE AND GET ORDERS **************
 
@@ -17,78 +22,119 @@ const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
 // @route POST api/v1/orders
 // @access privet student //DONE
 const createOrder = asyncHandler(async (req, res, next) => {
-	// get accepted offer
-	const acceptedOffer = await Offer.findById(req.body.offer).populate({
-		path: "request",
-		populate: {
-			path: "student",
-			populate: {
-				path: "wallet",
-			},
-		},
-	});
+	const session = await mongoose.startSession();
+	session.startTransaction();
 
-	//get wallet
-	const studentWallet = await Wallet.findOne({
-		userId: acceptedOffer.request.student._id,
-		userType: "Student",
-	});
-	if (!studentWallet) {
-		return next(new ApiError("There is no wallet for this user"));
-	}
-
-	// 1- check if student have Balance to cover order price
-	if (studentWallet.balance < acceptedOffer.studentPrice) {
-		return next(
-			new ApiError("You don't have balance enough to create this order"),
-		);
-	}
-
-	// 2- create order
-	const order = await Model.create({
-		student: req.user._id,
-		instructor: acceptedOffer.instructor,
-		studentPrice: acceptedOffer.studentPrice,
-		instructorPrice: acceptedOffer.instructorPrice,
-		deadline: acceptedOffer.request.deadline,
-		instructorCurrency: acceptedOffer.instructorCurrency,
-		studentCurrency: acceptedOffer.studentCurrency,
-		paidAt: Date.now(),
-		startedAt: Date.now(),
-		offer: acceptedOffer._id,
-	});
-
-	// 3- create wallet transaction to freeze
 	try {
-		const transaction = await Transaction.create({
-			wallet: studentWallet._id,
-			type: "debit",
-			status: "completed",
-			amount: order.studentPrice,
-			reason: "order_create",
-			referenceModel: "Order",
-			referenceId: order._id,
-			balanceBefore: studentWallet.balance - order.studentPrice,
-			balanceAfter: studentWallet.balance,
+		// 1️⃣ Get accepted offer
+		const acceptedOffer = await Offer.findById(req.body.offer)
+			.populate({
+				path: "request",
+				populate: {
+					path: "student",
+				},
+			})
+			.populate("instructor")
+			.session(session);
+
+		if (!acceptedOffer) {
+			throw new ApiError("Offer not found", 404);
+		}
+
+		// 2️⃣ Get wallet
+		const studentWallet = await Wallet.findOne({
+			userId: acceptedOffer.request.student._id,
+			userType: "Student",
+		}).session(session);
+
+		if (!studentWallet) {
+			throw new ApiError("There is no wallet for this user", 404);
+		}
+
+		if (studentWallet.balance < acceptedOffer.studentPrice) {
+			throw new ApiError(
+				"You don't have balance enough to create this order",
+				400,
+			);
+		}
+
+		// 3️⃣ Create Order
+		const order = await Model.create(
+			[
+				{
+					student: req.user._id,
+					instructor: acceptedOffer.instructor._id,
+					studentPrice: acceptedOffer.studentPrice,
+					instructorPrice: acceptedOffer.instructorPrice,
+					deadline: acceptedOffer.request.deadline,
+					instructorCurrency: acceptedOffer.instructorCurrency,
+					studentCurrency: acceptedOffer.studentCurrency,
+					paidAt: Date.now(),
+					startedAt: Date.now(),
+					offer: acceptedOffer._id,
+				},
+			],
+			{ session },
+		);
+
+		const createdOrder = order[0];
+
+		// 4️⃣ Create Transaction
+		await Transaction.create(
+			[
+				{
+					wallet: studentWallet._id,
+					type: "debit",
+					status: "completed",
+					amount: createdOrder.studentPrice,
+					reason: "order_create",
+					referenceModel: "Order",
+					referenceId: createdOrder._id,
+					balanceBefore: studentWallet.balance,
+					balanceAfter: studentWallet.balance - createdOrder.studentPrice,
+				},
+			],
+			{ session },
+		);
+
+		// 5️⃣ Update wallet
+		studentWallet.balance -= createdOrder.studentPrice;
+		studentWallet.freezedBalance += createdOrder.studentPrice;
+		await studentWallet.save({ session });
+
+		// ✅ Commit transaction
+		await session.commitTransaction();
+		session.endSession();
+
+		// 📧 Send emails AFTER commit (important)
+		await sendEmail({
+			to: acceptedOffer.student.email,
+			subject: "Order Created Successfully 🎉",
+			html: studentCreateOrder(
+				createdOrder,
+				acceptedOffer.request.student.fullName,
+			),
 		});
 
-		studentWallet.balance -= order.studentPrice;
-		studentWallet.freezedBalance += order.studentPrice;
-		await studentWallet.save();
-	} catch (err) {
-		// delete order
-		await Model.deleteOne({ _id: order._id });
-		console.log(err);
+		await sendEmail({
+			to: acceptedOffer.instructor.email,
+			subject: "New Order Assigned 📚",
+			html: instructorCreateOrder(
+				createdOrder,
+				acceptedOffer.instructor.fullName,
+			),
+		});
 
-		return next(
-			new ApiError("Error when create transaction , order creation failed"),
-		);
+		res.status(200).json({
+			message: "Order created successfully",
+			data: createdOrder,
+		});
+	} catch (err) {
+		await session.abortTransaction();
+		session.endSession();
+
+		return next(err);
 	}
-	// 4- res
-	res.status(200).json({
-		message: "order created",
-		data: order,
-	});
 });
 
 // @desc get all orders
@@ -430,7 +476,107 @@ const finishAndSubmitOrder = asyncHandler(async (req, res, next) => {
 
 // *********** DELETE AND CANCEL ORDERS **************
 
-const cancelOrder = asyncHandler(async (req, res, next) => {});
+//@desc cancel order
+//@route PUT /api/v1/orders/cancel/:id
+//@access private student
+const cancelOrder = asyncHandler(async (req, res, next) => {
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		const { id } = req.params;
+
+		// 1️⃣ get order
+		const order = await Model.findById(id).session(session);
+		if (!order) {
+			throw new ApiError("No order found with this id", 404);
+		}
+
+		// 2️⃣ check ownership (only student)
+		if (order.student.toString() !== req.user._id.toString()) {
+			throw new ApiError("ليس لديك صلاحية لإلغاء هذا الطلب", 403);
+		}
+
+		// 3️⃣ prevent cancel if completed
+		if (order.status === "completed") {
+			throw new ApiError("لا يمكن إلغاء طلب مكتمل", 400);
+		}
+
+		// 4️⃣ get student wallet
+		const studentWallet = await Wallet.findOne({
+			userId: order.student,
+			userType: "Student",
+		}).session(session);
+
+		if (!studentWallet) {
+			throw new ApiError("محفظة الطالب غير موجودة", 404);
+		}
+
+		// 5️⃣ refund money
+		const balanceBefore = studentWallet.balance;
+
+		studentWallet.balance += order.studentPrice;
+		studentWallet.freezedBalance -= order.studentPrice;
+
+		await studentWallet.save({ session });
+
+		// 6️⃣ create refund transaction
+		await Transaction.create(
+			[
+				{
+					wallet: studentWallet._id,
+					type: "credit",
+					status: "completed",
+					amount: order.studentPrice,
+					reason: "order_cancelled",
+					referenceId: order._id,
+					referenceModel: "Order",
+					balanceBefore,
+					balanceAfter: studentWallet.balance,
+				},
+			],
+			{ session },
+		);
+
+		// 7️⃣ update order
+		order.status = "cancelled";
+		order.paymentStatus = "refunded";
+		order.cancelledAt = Date.now();
+
+		await order.save({ session });
+
+		await session.commitTransaction();
+		session.endSession();
+
+		res.status(200).json({
+			message: "تم إلغاء الطلب واسترجاع المبلغ بنجاح",
+			data: order,
+		});
+	} catch (err) {
+		await session.abortTransaction();
+		session.endSession();
+		return next(err);
+	}
+});
+
+//@desc delete order (soft delete)
+//@route DELETE /api/v1/orders/:id
+//@access private admin
+const deleteOrder = asyncHandler(async (req, res, next) => {
+	const { id } = req.params;
+
+	const order = await Model.findById(id);
+	if (!order) {
+		return next(new ApiError("لا يوجد طلب بهذا الرقم", 404));
+	}
+
+	order.isDeleted = true;
+	await order.save();
+
+	res.status(200).json({
+		message: "تم حذف الطلب بنجاح",
+	});
+});
 
 module.exports = {
 	createOrder,
@@ -445,4 +591,6 @@ module.exports = {
 	fileLocalUpdate,
 	uploadFiles,
 	getLoggedUserVideos,
+	cancelOrder,
+	deleteOrder,
 };

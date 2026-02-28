@@ -9,6 +9,11 @@ const ApiError = require("../utils/ApiError");
 
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
 const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
+const sendEmail = require("../utils/sendEmail");
+const {
+	studentAcceptedOfferTemplate,
+	instructorOfferAcceptedTemplate,
+} = require("../utils/emailTemplates");
 
 const uploadFiles = uploadMixOfFiles([
 	{
@@ -311,6 +316,18 @@ const acceptOffer = asyncHandler(async (req, res, next) => {
 	offer.status = "accepted";
 	offer.allFiles = req.body.allFiles || [];
 	await offer.save();
+
+	await sendEmail({
+		to: offer.request.student.email,
+		subject: "You Accepted the Offer! 🎉",
+		html: studentAcceptedOfferTemplate(offer, offer.request.student.fullName),
+	});
+
+	await sendEmail({
+		to: offer.instructor.email,
+		subject: "Student Accepted Your Offer ✅",
+		html: instructorOfferAcceptedTemplate(offer, offer.instructor.fullName),
+	});
 
 	res.status(200).json({
 		message: "Offer accepted",
