@@ -223,7 +223,7 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 	const order = await Model.findByIdAndUpdate(
 		orderId,
 		{
-			video: {
+			videos: {
 				uploadUrl: request.data.data.url,
 				status: "waiting",
 			},
@@ -250,6 +250,7 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	// if (!verifyMuxSignature(req)) {
 	// 	return next(new ApiError("Invalid signature", 500));
 	// // }
+	console.log(req.body);
 
 	const event = req.body;
 
@@ -268,23 +269,23 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	// update video status
 	switch (event.type) {
 		case "video.asset.ready":
-			order.videoLinks.status = "ready";
-			order.videoLinks.assetId = event.data.id;
-			order.videoLinks.playbackId = event.data.playback_ids[0].id;
-			order.videoLinks.duration = event.data.duration;
-			order.videoLinks.updatedAt = new Date();
+			order.videos.status = "ready";
+			order.videos.assetId = event.data.id;
+			order.videos.playbackId = event.data.playback_ids[0].id;
+			order.videos.duration = event.data.duration;
+			order.videos.updatedAt = new Date();
 			order.status = "submitted";
 			break;
 
 		case "video.asset.failed":
-			order.videoLinks.status = "failed";
-			order.videoLinks.assetId = null;
-			order.videoLinks.updatedAt = new Date();
+			order.videos.status = "failed";
+			order.videos.assetId = null;
+			order.videos.updatedAt = new Date();
 			break;
 
 		case "video.uploading":
-			order.videoLinks.status = "processing";
-			order.videoLinks.updatedAt = new Date();
+			order.videos.status = "processing";
+			order.videos.updatedAt = new Date();
 			break;
 
 		default:

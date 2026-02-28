@@ -1,4 +1,4 @@
-const { check } = require("express-validator");
+const { check, param } = require("express-validator");
 const validatorMiddleware = require("../../middlewares/validatorMiddleware");
 const Offer = require("../../models/offerModel");
 const Order = require("../../models/orderModel");
@@ -158,9 +158,31 @@ const uploadDocsValidator = [
 	validatorMiddleware,
 ];
 
+const getUploadVideoUrlValidator = [
+	param("orderId")
+		.notEmpty()
+		.withMessage("معرّف العرض مطلوب")
+		.isMongoId()
+		.withMessage("معرّف العرض غير صحيح")
+		.custom(async (val, { req }) => {
+			const order = await Order.findById(val);
+			if (!order) throw new Error("هذا العرض غير موجود");
+
+			if (order.instructor.toString() !== req.user._id.toString())
+				throw new Error("ليس لديك الصلاحية لرفع فيديو لهذا العرض");
+
+			if (order.isDeleted) throw new Error("لا يمكن رفع فيديو لعرض محذوف");
+
+			return true;
+		}),
+
+	validatorMiddleware,
+];
+
 module.exports = {
 	createOrderValidator,
 	finishAndSubmitOrderValidator,
 	getOrderValidator,
 	uploadDocsValidator,
+	getUploadVideoUrlValidator,
 };

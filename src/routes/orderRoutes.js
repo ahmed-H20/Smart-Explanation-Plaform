@@ -9,16 +9,29 @@ const {
 	uploadFiles,
 	uploadDocs,
 	uploadQuizzes,
+	handleMuxWebhook,
+	getUploadVideoUrl,
 } = require("../controllers/orderController");
 const {
 	createOrderValidator,
 	finishAndSubmitOrderValidator,
 	getOrderValidator,
 	uploadDocsValidator,
+	getUploadVideoUrlValidator,
 } = require("../utils/validators/orderValidator");
 const { protect, allowedTo } = require("../controllers/authController");
 
 const router = express.Router();
+
+router.post("/mux_webhook", handleMuxWebhook);
+
+router.get(
+	"/createUploadUrl/:orderId",
+	protect(),
+	allowedTo("instructor"),
+	getUploadVideoUrlValidator,
+	getUploadVideoUrl,
+);
 
 router.get(
 	"/me",

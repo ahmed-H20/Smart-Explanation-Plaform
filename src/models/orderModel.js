@@ -54,7 +54,7 @@ const orderSchema = mongoose.Schema(
 			type: Date,
 			required: [true, "deadline is required"],
 		},
-		videoLinks: {
+		videos: {
 			assetId: {
 				type: String,
 			},
@@ -75,6 +75,10 @@ const orderSchema = mongoose.Schema(
 		paidAt: Date,
 		startedAt: Date,
 		completedAt: Date,
+		isDeleted: {
+			type: Boolean,
+			default: false,
+		},
 	},
 	{
 		timestamps: true,
