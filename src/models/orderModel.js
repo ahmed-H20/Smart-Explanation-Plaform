@@ -24,8 +24,12 @@ const orderSchema = mongoose.Schema(
 				"in_progress",
 				"submitted",
 				"completed",
+				"meeting_requested",
+				"meeting_scheduled",
 				"cancelled",
+				"approved",
 				"disputed", // حالة النزاع
+				"revision_requested", // not understand assignment yet
 			],
 			default: "in_progress",
 		},
@@ -72,6 +76,10 @@ const orderSchema = mongoose.Schema(
 				updatedAt: Date,
 			},
 		],
+		AssignmentMeeting: {
+			link: String,
+			time: Date,
+		},
 		documents: [String],
 		quizzes: [String],
 		paidAt: Date,

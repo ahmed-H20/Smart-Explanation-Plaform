@@ -2,6 +2,7 @@ const { body, param } = require("express-validator");
 const validatorMiddleware = require("../../middlewares/validatorMiddleware");
 const Offer = require("../../models/offerModel");
 const Request = require("../../models/requestModel");
+const ApiError = require("../ApiError");
 
 // ── Create Offer ──────────────────────────────────────────────────────────────
 const createOfferValidator = [
@@ -149,7 +150,27 @@ const acceptOfferValidator = [
 		.withMessage("معرّف العرض غير صحيح")
 		.custom(async (val, { req }) => {
 			// Single DB call with populate
-			const offer = await Offer.findById(val).populate("request");
+			const offer = await Offer.findById(val).populate([
+				{
+					path: "request",
+					populate: {
+						path: "student",
+						select: "email fullName",
+					},
+				},
+				{
+					path: "instructor",
+					select: "email fullName",
+				},
+			]);
+
+			if (!offer.request?.student?.email) {
+				throw new ApiError("Student email not found", 400);
+			}
+
+			if (!offer.instructor?.email) {
+				throw new ApiError("Instructor email not found", 400);
+			}
 
 			if (!offer) {
 				throw new Error("العرض بهذا id غير موجود");
@@ -165,7 +186,7 @@ const acceptOfferValidator = [
 			}
 
 			// Check request ownership
-			if (offer.request.student.toString() !== req.user._id.toString()) {
+			if (offer.request.student._id.toString() !== req.user._id.toString()) {
 				throw new Error("ليس لديك الصلاحية لقبول هذا العرض");
 			}
 

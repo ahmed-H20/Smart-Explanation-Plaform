@@ -103,12 +103,20 @@ const protect = (Model) =>
 			const models = [studentModel, instructorModel];
 
 			const results = await Promise.all(
-				models.map((model) => model.findById(decode.id)),
+				models.map((model) =>
+					model.findById(decode.id).populate({
+						path: "country",
+						select: "currencyCode",
+					}),
+				),
 			);
 
 			currentUser = results.find(Boolean);
 		} else {
-			currentUser = await Model.findById(decode.id);
+			currentUser = await Model.findById(decode.id).populate({
+				path: "country",
+				select: "currencyCode",
+			});
 		}
 
 		if (!currentUser) {

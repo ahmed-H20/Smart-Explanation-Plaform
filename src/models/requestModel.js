@@ -7,6 +7,11 @@ const requestSchema = mongoose.Schema(
 			ref: "Student",
 			required: [true, "Student id is required"],
 		},
+		type: {
+			type: String,
+			enum: ["video", "assignment"],
+			default: "video",
+		},
 		major: {
 			type: mongoose.Schema.ObjectId,
 			ref: "Major",

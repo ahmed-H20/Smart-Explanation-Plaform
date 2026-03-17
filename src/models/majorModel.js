@@ -19,5 +19,5 @@ const majorSchema = mongoose.Schema(
 	},
 );
 
-const majorModel = mongoose.model("major", majorSchema);
+const majorModel = mongoose.model("Major", majorSchema);
 module.exports = majorModel;

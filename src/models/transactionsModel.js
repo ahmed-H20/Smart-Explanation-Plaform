@@ -29,6 +29,7 @@ const transactionsSchema = mongoose.Schema(
 				"order_cancelled",
 				"order_create",
 				"order_refund",
+				"subscription_payment",
 				"manual_charge_by_admin",
 				"platform_profit",
 				"withdraw",
@@ -43,7 +44,7 @@ const transactionsSchema = mongoose.Schema(
 		},
 		referenceModel: {
 			type: String,
-			enum: ["Order", "Wallet"], // order for orders, wallet for debit and credit
+			enum: ["Order", "Wallet", "Subscription"], // order for orders, wallet for debit and credit
 			required: true,
 		},
 		balanceBefore: {

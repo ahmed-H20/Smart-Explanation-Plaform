@@ -1,7 +1,6 @@
 require("dotenv").config({ path: ".env" });
 const path = require("path");
 const express = require("express");
-const ngrok = require("@ngrok/ngrok");
 const morgan = require("morgan");
 const dbConnecting = require("./src/config/database");
 const GlobalError = require("./src/middlewares/errorMiddleware");
@@ -17,14 +16,23 @@ const TransactionRoutes = require("./src/routes/transactionRoutes");
 const RequestRoutes = require("./src/routes/requestRoutes");
 const OffersRoutes = require("./src/routes/offerRoutes");
 const OrderRoutes = require("./src/routes/orderRoutes");
-const { createMuxPlaybackTokens } = require("./src/utils/generateVedioToken");
-const sendEmail = require("./src/utils/sendEmail");
+const AssignmentRoutes = require("./src/routes/assignmentRoutes");
+const SubscriptionPlanRoutes = require("./src/routes/subscriptionplanRoutes");
+const Subscription = require("./src/routes/subscriptionRoutes");
+const { connectRedis } = require("./src/config/redis");
+const expireSubscriptions = require("./src/jobs/Expiresubscriptions");
 
 // Create app
 const app = express();
 
 // Connect db
 dbConnecting();
+
+// Start the cron after DB connects
+expireSubscriptions.start();
+
+// Connect redis
+// connectRedis(); //TODO: remove comment
 
 // Middlewares
 app.use(morgan("dev")); //logging
@@ -43,6 +51,9 @@ app.use("/api/v1/transactions", TransactionRoutes);
 app.use("/api/v1/requests", RequestRoutes);
 app.use("/api/v1/offers", OffersRoutes);
 app.use("/api/v1/orders", OrderRoutes);
+app.use("/api/v1/assignments", AssignmentRoutes);
+app.use("/api/v1/subscriptionPlan", SubscriptionPlanRoutes);
+app.use("/api/v1/subscriptions", Subscription);
 
 // Not found route
 app.use((req, res, next) => {
