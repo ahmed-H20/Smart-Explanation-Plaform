@@ -28,11 +28,8 @@ const app = express();
 // Connect db
 dbConnecting();
 
-// Start the cron after DB connects
-expireSubscriptions.start();
-
 // Connect redis
-// connectRedis(); //TODO: remove comment
+connectRedis();
 
 // Middlewares
 app.use(morgan("dev")); //logging

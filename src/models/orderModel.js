@@ -38,6 +38,8 @@ const orderSchema = mongoose.Schema(
 			enum: ["held", "released", "refunded"],
 			default: "held",
 		},
+		paidBySubscription: Boolean,
+		subscription: String,
 		studentPrice: {
 			type: Number,
 			required: [true, "studentPrice is required"],

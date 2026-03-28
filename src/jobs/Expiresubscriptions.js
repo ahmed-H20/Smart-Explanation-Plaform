@@ -47,4 +47,5 @@ const expireSubscriptions = cron.schedule(
 	},
 );
 
-module.exports = expireSubscriptions;
+// Start the cron after DB connects
+expireSubscriptions.start();

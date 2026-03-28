@@ -12,6 +12,11 @@ const requestSchema = mongoose.Schema(
 			enum: ["video", "assignment"],
 			default: "video",
 		},
+		creationType: {
+			type: String,
+			enum: ["withDemoVideo", "directAccept"],
+			default: "withDemoVideo",
+		},
 		major: {
 			type: mongoose.Schema.ObjectId,
 			ref: "Major",
@@ -25,6 +30,13 @@ const requestSchema = mongoose.Schema(
 		budget: {
 			type: Number,
 		},
+		files: [
+			{
+				type: String,
+				required: [true, "files is required"],
+			},
+		],
+
 		status: {
 			type: String,
 			enum: ["open", "in-progress", "completed", "cancelled"],

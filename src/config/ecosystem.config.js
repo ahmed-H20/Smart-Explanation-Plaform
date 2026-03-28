@@ -20,5 +20,15 @@ module.exports = {
 				NODE_ENV: "production",
 			},
 		},
+		{
+			name: "corn",
+			script: "src/jobs/Expiresubscriptions.js",
+			instances: 1,
+			autorestart: true,
+			watch: false,
+			env: {
+				NODE_ENV: "production",
+			},
+		},
 	],
 };

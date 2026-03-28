@@ -28,6 +28,15 @@ const createRequest = asyncHandler(async (req, res, next) => {
 		student: req.user._id,
 	});
 
+	await request.populate({
+		path: "student",
+		select: "country",
+		populate: {
+			path: "country",
+			select: "currencyCode",
+		},
+	});
+
 	// 2- res
 	res.status(200).json({
 		message: "Assignment request created",
@@ -39,7 +48,9 @@ const createRequest = asyncHandler(async (req, res, next) => {
 
 	// create jobs
 	await Promise.all(
-		instructors.map((instructor) => addEmailJob({ instructor, request })),
+		instructors.map((instructor) =>
+			addEmailJob({ instructor, request }, "newAssignment"),
+		),
 	);
 });
 

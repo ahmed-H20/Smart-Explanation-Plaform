@@ -11,6 +11,8 @@ const {
 	getStudentId,
 	uploadFiles,
 	fileLocalUpdate,
+	createDirectRequest,
+	acceptDirectRequest,
 } = require("../controllers/requestController");
 const { protect, allowedTo } = require("../controllers/authController");
 const {
@@ -19,6 +21,7 @@ const {
 	updateRequestValidator,
 	changeRequestStatusValidator,
 	cancelRequestValidator,
+	createDiractRequestValidator,
 } = require("../utils/validators/requestValidator");
 
 const router = express.Router();
@@ -38,6 +41,23 @@ router
 	.get(allowedTo("admin"), getAllRequest);
 
 router.get("/me", allowedTo("student"), getLoggedStudentRequests);
+
+router.post(
+	"/createDirectRequest",
+	allowedTo("student"),
+	uploadFiles,
+	fileLocalUpdate,
+	createDiractRequestValidator,
+	createDirectRequest,
+);
+
+// router
+// 	.route("/:id/acceptDirect")
+// 	.put(
+// 		allowedTo("instructor"),
+// 		acceptDirectRequestValidator,
+// 		acceptDirectRequest,
+// 	);
 
 router
 	.route("/:id")
