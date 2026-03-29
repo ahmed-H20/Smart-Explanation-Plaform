@@ -9,7 +9,9 @@
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"dev": "nodemon server.js",
-		"start": "pm2 start src/config/ecosystem.config.js"
+		"start:api": "node server.js",
+		"start:worker": "node src/queues/email/emailWorkers.js",
+		"start:cron": "node src/jobs/Expiresubscriptions.js"
 	},
 	"dependencies": {
 		"@mux/mux-node": "^12.8.1",
