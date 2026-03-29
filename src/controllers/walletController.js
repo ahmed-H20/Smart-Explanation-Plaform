@@ -5,147 +5,399 @@ const Wallet = require("../models/walletModel");
 const Transaction = require("../models/transactionsModel");
 const ApiError = require("../utils/ApiError");
 
-// @desc get logged user wallet
-// @route GET /wallet/me
-// @access private user
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+
+/**
+ * Fetch wallet by userId and throw if missing or locked.
+ * Pass `checkLock = false` to skip the lock check (e.g. admin ops).
+ */
+const getWalletOrFail = async (
+	userId,
+	{ session = null, checkLock = true } = {},
+) => {
+	const query = Wallet.findOne({ userId });
+	if (session) query.session(session);
+
+	const wallet = await query;
+	if (!wallet) throw new ApiError("This user does not have a wallet.", 404);
+	if (checkLock && wallet.isLocked)
+		throw new ApiError("This wallet is locked.", 403);
+
+	return wallet;
+};
+
+/**
+ * Fetch a pending withdraw transaction and throw if not found or not pending.
+ */
+const getPendingWithdrawOrFail = async (
+	transactionId,
+	{ session = null } = {},
+) => {
+	const query = Transaction.findById(transactionId);
+	if (session) query.session(session);
+
+	const transaction = await query;
+	if (!transaction) throw new ApiError("Transaction not found.", 404);
+	if (transaction.reason !== "withdraw")
+		throw new ApiError("Transaction is not a withdraw.", 400);
+	if (transaction.status !== "pending") {
+		throw new ApiError(`Transaction is already ${transaction.status}.`, 400);
+	}
+
+	return transaction;
+};
+
+// ─────────────────────────────────────────────
+// User — read
+// ─────────────────────────────────────────────
+
+// @desc    Get logged user wallet
+// @route   GET /wallet/me
+// @access  Private (user)
 const getLoggedUserWallet = asyncHandler(async (req, res, next) => {
-	// 1- get wallet from user id
-	const wallet = await Wallet.findOne({ userId: req.user._id });
-	if (!wallet) {
-		return next(new ApiError("This user not have a wallet!", 504));
-	}
+	const wallet = await getWalletOrFail(req.user._id, { checkLock: false });
 
-	// 2- send res
-	res.status(200).json({
-		status: "success",
-		data: wallet,
-	});
+	res.status(200).json({ status: "success", data: wallet });
 });
 
-// TODO:get platform wallet
-
-// @desc get logged user balance
-// @route GET /wallet/balance
-// @access private user
+// @desc    Get logged user balance
+// @route   GET /wallet/balance
+// @access  Private (user)
 const getLoggedUserBalance = asyncHandler(async (req, res, next) => {
-	// 1- get wallet from user id
-	const wallet = await Wallet.findOne({ userId: req.user._id });
-	if (!wallet) {
-		return next(new ApiError("This user not have a wallet!", 504));
-	}
+	const wallet = await getWalletOrFail(req.user._id, { checkLock: false });
 
-	// 2- send res
-	res.status(200).json({
-		status: "success",
-		data: wallet.balance,
-	});
+	res.status(200).json({ status: "success", data: wallet.balance });
 });
 
-// @desc get logged user freezed-balance
-// @route GET /wallet/me/freezedBalance
-// @access private user
+// @desc    Get logged user freezed balance
+// @route   GET /wallet/me/freezedBalance
+// @access  Private (user)
 const getLoggedUserFreezedBalance = asyncHandler(async (req, res, next) => {
-	// 1- get wallet from user id
-	const wallet = await Wallet.findOne({ userId: req.user._id });
-	if (!wallet) {
-		return next(new ApiError("This user not have a wallet!", 504));
-	}
+	const wallet = await getWalletOrFail(req.user._id, { checkLock: false });
 
-	// 2- send res
+	res.status(200).json({ status: "success", data: wallet.freezedBalance });
+});
+
+// @desc    Get logged user transactions (paginated, newest first)
+// @route   GET /wallet/me/transactions
+// @access  Private (user)
+const getLoggedUserTransactions = asyncHandler(async (req, res, next) => {
+	const wallet = await getWalletOrFail(req.user._id, { checkLock: false });
+
+	const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+	const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+	const skip = (page - 1) * limit;
+
+	const [transactions, total] = await Promise.all([
+		Transaction.find({ wallet: wallet._id })
+			.sort({ createdAt: -1 })
+			.skip(skip)
+			.limit(limit),
+		Transaction.countDocuments({ wallet: wallet._id }),
+	]);
+
 	res.status(200).json({
 		status: "success",
-		data: wallet.freezedBalance,
+		pagination: {
+			total,
+			page,
+			limit,
+			pages: Math.ceil(total / limit),
+		},
+		data: transactions,
 	});
 });
 
-// TODO: @desc get logged user transactions
-// @route GET /wallet/me/transactions
-// @access private user
+// ─────────────────────────────────────────────
+// Instructor — withdraw
+// ─────────────────────────────────────────────
 
-// @desc look wallet for user
-// @route PUT /wallet/lock/:id
-// @access private (admin)
+// @desc    Request a withdrawal (moves balance → freezedBalance, creates pending tx)
+// @route   POST /wallet/withdraw
+// @access  Private (instructor)
+const requestWithdraw = asyncHandler(async (req, res, next) => {
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		const { amount } = req.body;
+
+		if (!amount || Number.isNaN(Number(amount)) || Number(amount) <= 0) {
+			throw new ApiError("Amount must be a positive number.", 400);
+		}
+
+		const numericAmount = Number(amount);
+
+		// findOneAndUpdate with $inc is atomic — prevents race conditions /
+		// double-withdraw without needing an extra lock document.
+		const wallet = await Wallet.findOneAndUpdate(
+			{
+				userId: req.user._id,
+				isLocked: false,
+				balance: { $gte: numericAmount }, // sufficient balance guard
+			},
+			{
+				$inc: {
+					balance: -numericAmount,
+					freezedBalance: numericAmount,
+				},
+			},
+			{ new: true, session },
+		);
+
+		if (!wallet) {
+			// Distinguish between "no wallet", "locked", and "insufficient funds"
+			const existing = await Wallet.findOne({ userId: req.user._id }).session(
+				session,
+			);
+			if (!existing) throw new ApiError("Wallet not found.", 404);
+			if (existing.isLocked) throw new ApiError("Wallet is locked.", 403);
+			throw new ApiError("Insufficient balance.", 400);
+		}
+
+		const balanceBefore = wallet.balance + numericAmount; // value before the deduction
+
+		const transaction = await Transaction.create(
+			[
+				{
+					wallet: wallet._id,
+					type: "debit",
+					status: "pending",
+					amount: numericAmount,
+					reason: "withdraw",
+					referenceId: wallet._id,
+					referenceModel: "Wallet",
+					balanceBefore,
+					balanceAfter: wallet.balance,
+				},
+			],
+			{ session },
+		);
+
+		await session.commitTransaction();
+		session.endSession();
+
+		res.status(201).json({
+			status: "success",
+			message: "Withdrawal request submitted and is pending admin approval.",
+			data: {
+				balance: wallet.balance,
+				freezedBalance: wallet.freezedBalance,
+				transaction: transaction._id,
+				wallet,
+			},
+		});
+	} catch (err) {
+		await session.abortTransaction();
+		session.endSession();
+		return next(err);
+	}
+});
+
+// ─────────────────────────────────────────────
+// Admin — withdraw management
+// ─────────────────────────────────────────────
+
+// @desc    Approve a pending withdrawal (deducts from freezedBalance, marks completed)
+// @route   PATCH /wallet/withdraw/:id/approve
+// @access  Private (admin)
+const approveWithdraw = asyncHandler(async (req, res, next) => {
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		const transaction = await getPendingWithdrawOrFail(req.params.id, {
+			session,
+		});
+
+		const wallet = await Wallet.findOneAndUpdate(
+			{
+				_id: transaction.wallet,
+				freezedBalance: { $gte: transaction.amount }, // safety guard
+			},
+			{ $inc: { freezedBalance: -transaction.amount } },
+			{ new: true, session },
+		);
+
+		if (!wallet) {
+			throw new ApiError(
+				"Wallet not found or freezed balance is inconsistent.",
+				500,
+			);
+		}
+
+		transaction.status = "completed";
+		await transaction.save({ session });
+
+		await session.commitTransaction();
+		session.endSession();
+
+		res.status(200).json({
+			status: "success",
+			message: "Withdrawal approved successfully.",
+			data: transaction,
+		});
+	} catch (err) {
+		await session.abortTransaction();
+		session.endSession();
+		return next(err);
+	}
+});
+
+// @desc    Reject a pending withdrawal (returns amount from freezedBalance → balance)
+// @route   PATCH /wallet/withdraw/:id/reject
+// @access  Private (admin)
+const rejectWithdraw = asyncHandler(async (req, res, next) => {
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		const transaction = await getPendingWithdrawOrFail(req.params.id, {
+			session,
+		});
+
+		const wallet = await Wallet.findOneAndUpdate(
+			{
+				_id: transaction.wallet,
+				freezedBalance: { $gte: transaction.amount },
+			},
+			{
+				$inc: {
+					freezedBalance: -transaction.amount,
+					balance: transaction.amount,
+				},
+			},
+			{ new: true, session },
+		);
+
+		if (!wallet) {
+			throw new ApiError(
+				"Wallet not found or freezed balance is inconsistent.",
+				500,
+			);
+		}
+
+		transaction.status = "failed";
+		await transaction.save({ session });
+
+		await session.commitTransaction();
+		session.endSession();
+
+		res.status(200).json({
+			status: "success",
+			message: "Withdrawal rejected and amount returned to balance.",
+			data: transaction,
+		});
+	} catch (err) {
+		await session.abortTransaction();
+		session.endSession();
+		return next(err);
+	}
+});
+
+// @desc    Attach a receipt URL to a completed/pending withdrawal transaction
+// @route   PATCH /wallet/withdraw/:id/receipt
+// @access  Private (admin)
+const uploadWithdrawReceipt = asyncHandler(async (req, res, next) => {
+	const { id } = req.params;
+
+	// Expect the upload middleware to place the URL in req.receiptUrl
+	// (or fall back to req.body.receiptUrl for manual testing)
+	const receiptUrl = req.receiptUrl || req.body.receiptUrl;
+	if (!receiptUrl) {
+		return next(new ApiError("No receipt URL provided.", 400));
+	}
+
+	const transaction = await Transaction.findOneAndUpdate(
+		{ _id: id, reason: "withdraw" },
+		{ receipt: receiptUrl },
+		{ new: true, runValidators: true },
+	);
+
+	if (!transaction) {
+		return next(new ApiError("Withdraw transaction not found.", 404));
+	}
+
+	res.status(200).json({
+		status: "success",
+		message: "Receipt uploaded successfully.",
+		data: transaction,
+	});
+});
+
+// ─────────────────────────────────────────────
+// Admin — wallet management
+// ─────────────────────────────────────────────
+
+// @desc    Lock a user wallet
+// @route   PUT /wallet/lock/:id
+// @access  Private (admin)
 const lockWallet = asyncHandler(async (req, res, next) => {
-	// 1- get user id
-	const { id } = req.params;
+	const wallet = await Wallet.findOneAndUpdate(
+		{ userId: req.params.id },
+		{ isLocked: true },
+		{ new: true },
+	);
+	if (!wallet)
+		return next(new ApiError("This user does not have a wallet.", 404));
 
-	// 2- get wallet
-	const wallet = await Wallet.findOne({ userId: id });
-	if (!wallet) {
-		return next(new ApiError("This user not have a wallet!", 504));
-	}
-
-	// 3- lock wallet
-	wallet.isLocked = true;
-	await wallet.save();
-
-	// 4- res
 	res.status(200).json({
 		status: "success",
-		message: `wallet for user: ${id} is locked🔒`,
+		message: `Wallet for user ${req.params.id} is locked 🔒`,
 	});
 });
 
-// @desc unLook wallet for user
-// @route PUT /wallet/unlock/:id
-// @access private (admin)
+// @desc    Unlock a user wallet
+// @route   PUT /wallet/unlock/:id
+// @access  Private (admin)
 const unLockWallet = asyncHandler(async (req, res, next) => {
-	// 1- get user id
-	const { id } = req.params;
+	const wallet = await Wallet.findOneAndUpdate(
+		{ userId: req.params.id },
+		{ isLocked: false },
+		{ new: true },
+	);
+	if (!wallet)
+		return next(new ApiError("This user does not have a wallet.", 404));
 
-	// 2- get wallet
-	const wallet = await Wallet.findOne({ userId: id });
-	if (!wallet) {
-		return next(new ApiError("This user not have a wallet!", 504));
-	}
-
-	// 3- lock wallet
-	wallet.isLocked = false;
-	await wallet.save();
-
-	// 4- res
 	res.status(200).json({
 		status: "success",
-		message: `wallet for user: ${id} is unlocked🔓`,
+		message: `Wallet for user ${req.params.id} is unlocked 🔓`,
 	});
 });
 
-// @desc charge wallet manually
-// @route PUT /wallet/charge/:id
-// @access private (admin)
+// @desc    Manually charge a wallet (admin override)
+// @route   PUT /wallet/charge/:id
+// @access  Private (admin)
 const chargeWalletManually = asyncHandler(async (req, res, next) => {
 	const session = await mongoose.startSession();
 	session.startTransaction();
 
 	try {
-		// 1️⃣ get id and balance
 		const { id } = req.params;
 		const { balance } = req.body;
 
-		if (!balance || Number.isNaN(balance) || balance <= 0) {
-			throw new ApiError("المبلغ يجب أن يكون رقم موجب", 400);
+		if (!balance || Number.isNaN(Number(balance)) || Number(balance) <= 0) {
+			throw new ApiError("Amount must be a positive number.", 400);
 		}
 
-		// 2️⃣ get wallet
+		const numericBalance = Number(balance);
+
 		const wallet = await Wallet.findById(id).session(session);
-		if (!wallet) {
-			throw new ApiError("المحفظة غير موجودة", 404);
-		}
+		if (!wallet) throw new ApiError("Wallet not found.", 404);
 
 		const balanceBefore = wallet.balance;
-
-		// 3️⃣ update wallet balance
-		wallet.balance += Number(balance);
+		wallet.balance += numericBalance;
 		await wallet.save({ session });
 
-		// 4️⃣ create transaction record
 		await Transaction.create(
 			[
 				{
 					wallet: wallet._id,
 					type: "credit",
 					status: "completed",
-					amount: balance,
+					amount: numericBalance,
 					reason: "manual_charge_by_admin",
 					referenceId: wallet._id,
 					referenceModel: "Wallet",
@@ -159,9 +411,9 @@ const chargeWalletManually = asyncHandler(async (req, res, next) => {
 		await session.commitTransaction();
 		session.endSession();
 
-		// 5️⃣ response
 		res.status(200).json({
-			message: "تم شحن المحفظة بنجاح",
+			status: "success",
+			message: "Wallet charged successfully.",
 			data: wallet,
 		});
 	} catch (err) {
@@ -172,117 +424,19 @@ const chargeWalletManually = asyncHandler(async (req, res, next) => {
 });
 
 module.exports = {
+	// User
 	getLoggedUserWallet,
 	getLoggedUserBalance,
 	getLoggedUserFreezedBalance,
+	getLoggedUserTransactions,
+	// Instructor
+	requestWithdraw,
+	// Admin — withdrawals
+	approveWithdraw,
+	rejectWithdraw,
+	uploadWithdrawReceipt,
+	// Admin — wallet management
 	lockWallet,
 	unLockWallet,
 	chargeWalletManually,
 };
-
-/*
-POST  /wallet/deposit
-POST  /wallet/withdraw
-*/
-
-// NOTE: TO Link with getway payment
-// TODO: first step
-// const checkoutSession = asyncHandler(async (req, res, next) => {
-// 	//params -> cartId
-// 	const { cartId } = req.params;
-
-// 	const taxPrice = 0;
-// 	const shippingPrice = 0;
-
-// 	// 1- get cart depends on cartId
-// 	const cart = await Cart.findById(cartId).populate(
-// 		"items.product",
-// 		"title coverImage",
-// 	);
-// 	if (!cart) next(new ApiError("There is no cart for this user", 404));
-
-// 	// 2- get total order price from cart (check if coupon apply)
-// 	const totalOrderPrice =
-// 		cart.totalPriceAfterDiscount > 0
-// 			? cart.totalPriceAfterDiscount
-// 			: cart.totalPrice;
-
-// 	const totalPrice = totalOrderPrice + taxPrice + shippingPrice;
-
-// 	// get cart items to send to stripe - each product data
-// 	const lineItems = cart.items.map((item) => ({
-// 		price_data: {
-// 			currency: "egp",
-// 			unit_amount: Math.round(item.price * 100),
-// 			product_data: {
-// 				name: item.product.title,
-// 				images: [item.product.coverImage],
-// 			},
-// 		},
-// 		quantity: item.quantity,
-// 	}));
-
-// 	// 3- create stripe checkout session
-// 	const session = await stripe.checkout.sessions.create({
-// 		line_items: lineItems,
-// 		// for all data if you want fast code
-// 		//[
-// 		// 	{
-// 		// 		price_data: {
-// 		// 			currency: "egp",
-// 		// 			unit_amount_decimal: totalPrice * 100,
-// 		// 			product_data: {
-// 		// 				name: "Order Payment",
-// 		// 			},
-// 		// 		},
-// 		// 		quantity: 1,
-// 		// 	},
-// 		// ],
-// 		// eslint-disable-next-line no-undef
-// 		success_url: `${req.protocol}://${req.get("host")}/success`,
-// 		cancel_url: `${req.protocol}://${req.get("host")}/failed`,
-// 		mode: "payment",
-// 		customer_email: req.user.email,
-// 		client_reference_id: cartId,
-// 	});
-
-// 	// 4- send session to response
-// 	res.status(200).json({
-// 		status: "success",
-// 		session,
-// 	});
-// });
-
-// TODO: Second step
-// const webhookCheckout = asyncHandler(async (req, res, next) => {
-// 	let event;
-// 	// Get the signature sent by Stripe
-// 	const signature = req.headers["stripe-signature"];
-// 	const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-// 	if (endpointSecret) {
-// 		try {
-// 			event = await stripe.webhooks.constructEvent(
-// 				req.body,
-// 				signature,
-// 				endpointSecret,
-// 			);
-// 		} catch (err) {
-// 			console.log(`⚠️ Webhook signature verification failed.`, err.message);
-// 			return res.sendStatus(400);
-// 		}
-
-// 		if (event.type === "checkout.session.completed") {
-// 			const order = await createCardOrder(event.data.object);
-// 			if (order) {
-// 				console.log(order);
-// 				res.status(200).json({ paid: true });
-// 			}
-// 		}
-
-// 		res.status(500).json({ message: "failed to pay" });
-// 	}
-// });
-
-// TODO: third step
-// create order after card payment success

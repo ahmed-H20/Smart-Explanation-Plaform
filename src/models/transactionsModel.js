@@ -1,6 +1,10 @@
+/* eslint-disable prefer-arrow-callback */
 const mongoose = require("mongoose");
 
-const transactionsSchema = mongoose.Schema(
+const sendEmail = require("../utils/sendEmail");
+const Wallet = require("./walletModel");
+
+const transactionsSchema = new mongoose.Schema(
 	{
 		wallet: {
 			type: mongoose.Schema.Types.ObjectId,
@@ -20,6 +24,15 @@ const transactionsSchema = mongoose.Schema(
 		amount: {
 			type: Number,
 			required: [true, "Transaction amount is required"],
+			min: [0.01, "Amount must be greater than 0"],
+		},
+		image: {
+			type: String,
+		},
+		// Proof of payment sent to the instructor after a withdrawal is approved
+		receipt: {
+			type: String,
+			default: null,
 		},
 		reason: {
 			type: String,
@@ -44,16 +57,16 @@ const transactionsSchema = mongoose.Schema(
 		},
 		referenceModel: {
 			type: String,
-			enum: ["Order", "Wallet", "Subscription"], // order for orders, wallet for debit and credit
+			enum: ["Order", "Wallet", "Subscription"],
 			required: true,
 		},
 		balanceBefore: {
 			type: Number,
-			required: [true, "Balance Before Transaction is required"],
+			required: [true, "Balance before transaction is required"],
 		},
 		balanceAfter: {
 			type: Number,
-			required: [true, "Balance After Transaction is required"],
+			required: [true, "Balance after transaction is required"],
 		},
 		description: {
 			type: String,
@@ -65,8 +78,21 @@ const transactionsSchema = mongoose.Schema(
 	},
 );
 
-// populate user
-transactionsSchema.pre(/^find/, async function () {
+// ─────────────────────────────────────────────
+// Indexes
+// ─────────────────────────────────────────────
+
+// Most common query: "my transactions, newest first"
+transactionsSchema.index({ wallet: 1, createdAt: -1 });
+
+// Admin filtering by status + reason
+transactionsSchema.index({ status: 1, reason: 1 });
+
+// ─────────────────────────────────────────────
+// Query middleware — populate wallet → user
+// ─────────────────────────────────────────────
+
+transactionsSchema.pre(/^find/, function () {
 	this.populate({
 		path: "wallet",
 		populate: {
@@ -74,6 +100,72 @@ transactionsSchema.pre(/^find/, async function () {
 			select: "fullName email",
 		},
 	});
+});
+
+// ─────────────────────────────────────────────
+// Post-save hook — email notifications
+// ─────────────────────────────────────────────
+
+transactionsSchema.post("save", async function (doc) {
+	try {
+		const wallet = await Wallet.findById(doc.wallet).populate({
+			path: "userId",
+			select: "fullName email role country",
+			populate: { path: "country" },
+		});
+
+		if (!wallet?.userId) return;
+
+		const user = wallet.userId;
+		const currencyCode =
+			wallet.currencyCode || (user.country?.currencyCode ?? "");
+
+		// ── Email to user ──────────────────────────────
+		await sendEmail({
+			to: user.email,
+			subject: "New Transaction Notification",
+			html: `
+<div style="font-family:Arial,sans-serif;background:#f4f6f9;padding:20px;">
+  <div style="max-width:600px;margin:auto;background:#fff;padding:25px;border-radius:8px;">
+    <h2 style="color:#2c3e50;">Transaction Notification</h2>
+    <p>Hello <strong>${user.fullName}</strong>,</p>
+    <p>A new transaction has been processed on your wallet.</p>
+    <table style="width:100%;border-collapse:collapse;margin-top:15px;">
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Type</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.type}</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Status</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.status}</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Amount</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.amount} ${currencyCode}</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Balance Before</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.balanceBefore} ${currencyCode}</td></tr>
+      <tr><td style="padding:8px;"><strong>Balance After</strong></td><td style="padding:8px;">${doc.balanceAfter} ${currencyCode}</td></tr>
+    </table>
+    <p style="margin-top:20px;">If you did not initiate this transaction, please contact support immediately.</p>
+    <p style="margin-top:30px;font-size:12px;color:#888;">© ${new Date().getFullYear()} Your Platform. All rights reserved.</p>
+  </div>
+</div>`,
+		});
+
+		// ── Email to admin ─────────────────────────────
+		await sendEmail({
+			to: process.env.ADMIN_EMAIL,
+			subject: "New Transaction Created",
+			html: `
+<div style="font-family:Arial,sans-serif;background:#f9fafb;padding:20px;">
+  <div style="max-width:600px;margin:auto;background:#fff;padding:25px;border-radius:8px;">
+    <h2 style="color:#e74c3c;">New Transaction Alert</h2>
+    <p><strong>User:</strong> ${user.fullName}</p>
+    <p><strong>Transaction ID:</strong> ${doc._id}</p>
+    <p><strong>Email:</strong> ${user.email}</p>
+    <p><strong>Type:</strong> ${doc.type}</p>
+    <p><strong>Status:</strong> ${doc.status}</p>
+    <p><strong>Amount:</strong> ${doc.amount} ${currencyCode}</p>
+    <p><strong>Reason:</strong> ${doc.reason}</p>
+    <p><strong>Date:</strong> ${doc.createdAt.toISOString()}</p>
+  </div>
+</div>`,
+		});
+	} catch (err) {
+		// Non-fatal — log but never crash the request
+		console.error("Transaction email notification error:", err);
+	}
 });
 
 module.exports = mongoose.model("Transaction", transactionsSchema);

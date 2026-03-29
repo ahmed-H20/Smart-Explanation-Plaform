@@ -44,6 +44,13 @@ const signupStudentValidator = [
 		.isMobilePhone("ar-EG")
 		.withMessage("من فضلك أدخل رقم هاتف مصري صحيح"),
 
+	body("StudentIdImage").custom((value, { req }) => {
+		if (!req.file) {
+			throw new Error("يجب رفع صورة بطاقة التعريف الجامعية");
+		}
+		return true;
+	}),
+
 	validatorMiddleware,
 ];
 

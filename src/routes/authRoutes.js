@@ -5,6 +5,8 @@ const {
 	forgetPassword,
 	verifyResetCode,
 	resetPassword,
+	fileLocalUpdate,
+	uploadFiles,
 } = require("../controllers/authController");
 
 // models
@@ -29,17 +31,21 @@ router.post(
 );
 router.post("/instructors/login", loginValidator, login(Instructors));
 router.post(
-	// TODO: check email auth2 from google and update env
 	"/instructors/forgetPassword",
 	forgetPasswordValidator,
 	forgetPassword(Instructors),
 );
 
 // Student Routes
-router.post("/students/signup", signupStudentValidator, signup(Students));
+router.post(
+	"/students/signup",
+	uploadFiles,
+	fileLocalUpdate,
+	signupStudentValidator,
+	signup(Students),
+);
 router.post("/students/login", loginValidator, login(Students));
 router.post(
-	// TODO: check email auth2 from google and update env
 	"/students/forgetPassword",
 	forgetPasswordValidator,
 	forgetPassword(Students),

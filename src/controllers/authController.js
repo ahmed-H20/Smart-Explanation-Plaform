@@ -9,6 +9,19 @@ const ApiError = require("../utils/ApiError");
 const sendEmail = require("../utils/sendEmail");
 const studentModel = require("../models/studentsModel");
 const instructorModel = require("../models/instructorsModel");
+const { uploadStudentImage } = require("../middlewares/uploadFilesMiddleware");
+
+const uploadFiles = uploadStudentImage("StudentIdImage");
+
+const fileLocalUpdate = (req, res, next) => {
+	// Save image into db
+	if (req.file) {
+		if (!req.body.StudentIdImage) req.body.StudentIdImage = "";
+		req.body.idImage = req.file.filename;
+	}
+
+	next();
+};
 
 // @desc signup user
 // @route /api/v1/auth/:model/signup
@@ -272,4 +285,6 @@ module.exports = {
 	resetPassword,
 	protect,
 	allowedTo,
+	fileLocalUpdate,
+	uploadFiles,
 };

@@ -94,10 +94,6 @@ const acceptRequestValidator = [
 
 			if (!request) throw new ApiError("هذا الطلب غير موجود!", 400);
 
-			// Check request wallet
-			if (!request.student.wallet.balance) {
-				throw new Error("خطأ فى محفظة الطالب ");
-			}
 			if (request.student.wallet.balance < request.budget)
 				throw new ApiError("رصيد غير كافٍ", 400);
 

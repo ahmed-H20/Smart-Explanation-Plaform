@@ -30,6 +30,7 @@ const requestSchema = mongoose.Schema(
 		budget: {
 			type: Number,
 		},
+		assignmentInstructorPrice: Number,
 		files: [
 			{
 				type: String,

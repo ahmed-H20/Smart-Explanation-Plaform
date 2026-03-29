@@ -46,6 +46,8 @@ const studentSchema = mongoose.Schema(
 			required: [true, "phoneNumber is required"],
 			unique: true,
 		},
+		coverImage: String,
+		idImage: { type: String, required: [true, "Id Image is required"] },
 		active: {
 			type: Boolean,
 			default: true,
@@ -76,6 +78,9 @@ const studentSchema = mongoose.Schema(
 const addImageURL = (doc) => {
 	if (doc.profileImage) {
 		doc.profileImage = `${process.env.BASE_URL}/students/profileImages/${doc.profileImage}`;
+	}
+	if (doc.idImage) {
+		doc.idImage = `${process.env.BASE_URL}/students/files/${doc.idImage}`;
 	}
 };
 studentSchema.post("init", addImageURL);

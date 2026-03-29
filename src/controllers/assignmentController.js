@@ -21,11 +21,17 @@ const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
 // @route POST /api/v1/assignments/createRequests
 // @access private student
 const createRequest = asyncHandler(async (req, res, next) => {
+	console.log(
+		"assignmentInstructorPrice",
+		((req.body.budget * 13 * 40) / 100).toFixed(2),
+	);
+
 	// 1- create request
 	const request = await Request.create({
 		...req.body,
 		type: "assignment",
 		student: req.user._id,
+		assignmentInstructorPrice: ((req.body.budget * 13 * 40) / 100).toFixed(2),
 	});
 
 	await request.populate({
@@ -72,7 +78,7 @@ const acceptAssignmentRequest = asyncHandler(async (req, res, next) => {
 		const balanceBefore = request.student.wallet.balance;
 		await Wallet.findByIdAndUpdate(
 			request.student.wallet._id,
-			{ $inc: { balance: -request.budget } },
+			{ $inc: { balance: -request.budget, freezedBalance: +request.budget } },
 			{ session },
 		);
 
@@ -98,7 +104,7 @@ const acceptAssignmentRequest = asyncHandler(async (req, res, next) => {
 						student: request.student._id,
 						instructor: req.user._id,
 						studentPrice: request.budget,
-						instructorPrice: request.budget,
+						instructorPrice: request.assignmentInstructorPrice,
 						deadline: request.deadline,
 						studentCurrency: request.student.country.currencyCode,
 						instructorCurrency: req.user.country.currencyCode,
@@ -241,14 +247,14 @@ const approveAssignmentSolution = asyncHandler(async (req, res, next) => {
 			const studentBalanceBefore = studentWallet.balance;
 			const instructorBalanceBefore = instructorWallet.balance;
 
-			const studentBalanceAfter = studentBalanceBefore - order.studentPrice;
+			const studentBalanceAfter = studentWallet.balance;
 			const instructorBalanceAfter =
 				instructorBalanceBefore + order.instructorPrice;
 
 			// atomic balance update
 			await Wallet.updateOne(
 				{ _id: studentWallet._id },
-				{ $inc: { balance: -order.studentPrice } },
+				{ $inc: { freezedBalance: -order.studentPrice } },
 				{ session },
 			);
 

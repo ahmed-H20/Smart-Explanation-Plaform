@@ -10,7 +10,6 @@ const {
 } = require("./handlerFactory");
 const ApiFeatures = require("../utils/ApiFeatures");
 
-//DEBUG(TEST) @desc Create Trans
 // @route POST /transitions
 // @access private admin
 const createTransaction = createDocument(Transactions, Transactions.modelName);
