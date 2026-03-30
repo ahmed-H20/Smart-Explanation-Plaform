@@ -26,6 +26,10 @@ const transactionsSchema = new mongoose.Schema(
 			required: [true, "Transaction amount is required"],
 			min: [0.01, "Amount must be greater than 0"],
 		},
+		platform: {
+			type: String,
+			enum: ["instapay", "vodafoneCash"],
+		},
 		image: {
 			type: String,
 		},
@@ -110,9 +114,10 @@ transactionsSchema.post("save", async function (doc) {
 	try {
 		const wallet = await Wallet.findById(doc.wallet).populate({
 			path: "userId",
-			select: "fullName email role country",
 			populate: { path: "country" },
 		});
+
+		console.log(wallet);
 
 		if (!wallet?.userId) return;
 
@@ -154,6 +159,8 @@ transactionsSchema.post("save", async function (doc) {
     <p><strong>User:</strong> ${user.fullName}</p>
     <p><strong>Transaction ID:</strong> ${doc._id}</p>
     <p><strong>Email:</strong> ${user.email}</p>
+    <p><strong>phoneNumber:</strong> ${user.phoneNumber}</p>
+    <p><strong>Platform:</strong> ${doc.platform}</p>
     <p><strong>Type:</strong> ${doc.type}</p>
     <p><strong>Status:</strong> ${doc.status}</p>
     <p><strong>Amount:</strong> ${doc.amount} ${currencyCode}</p>

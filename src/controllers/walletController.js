@@ -122,10 +122,17 @@ const requestWithdraw = asyncHandler(async (req, res, next) => {
 	session.startTransaction();
 
 	try {
-		const { amount } = req.body;
+		const { amount, platform } = req.body;
 
 		if (!amount || Number.isNaN(Number(amount)) || Number(amount) <= 0) {
 			throw new ApiError("Amount must be a positive number.", 400);
+		}
+
+		if (!platform) {
+			throw new ApiError(
+				"You should select platform instapay or vodafoneCash",
+				400,
+			);
 		}
 
 		const numericAmount = Number(amount);
@@ -170,6 +177,7 @@ const requestWithdraw = asyncHandler(async (req, res, next) => {
 					referenceId: wallet._id,
 					referenceModel: "Wallet",
 					balanceBefore,
+					platform,
 					balanceAfter: wallet.balance,
 				},
 			],

@@ -74,12 +74,14 @@ const studentSchema = mongoose.Schema(
 	{ timestamps: true },
 );
 
-// make complete image url
 const addImageURL = (doc) => {
-	if (doc.profileImage) {
+	// profile image
+	if (doc.profileImage && !doc.profileImage.startsWith("http")) {
 		doc.profileImage = `${process.env.BASE_URL}/students/profileImages/${doc.profileImage}`;
 	}
-	if (doc.idImage) {
+
+	// id image
+	if (doc.idImage && !doc.idImage.startsWith("http")) {
 		doc.idImage = `${process.env.BASE_URL}/students/files/${doc.idImage}`;
 	}
 };
