@@ -117,8 +117,6 @@ transactionsSchema.post("save", async function (doc) {
 			populate: { path: "country" },
 		});
 
-		console.log(wallet);
-
 		if (!wallet?.userId) return;
 
 		const user = wallet.userId;
