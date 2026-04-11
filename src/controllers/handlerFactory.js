@@ -47,6 +47,7 @@ const createDocument = (Model, documentName) =>
 		res.status(200).json({
 			message: `${documentName} is created`,
 			data: document,
+			بيىلايتاا
 		});
 	});
 

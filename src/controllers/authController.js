@@ -78,6 +78,8 @@ const login = (Model) =>
 				secure: process.env.NODE_ENV === "production", //when production it will true
 				sameSite: "none",
 				maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+				domain: ".up.railway.app", // مهم جدًا
+  path: "/",
 			})
 			.status(201)
 			.json({
