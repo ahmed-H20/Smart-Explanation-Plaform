@@ -79,12 +79,13 @@ const login = (Model) =>
 				sameSite: "none",
 				maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 				domain: ".up.railway.app", // مهم جدًا
-  path: "/",
+				path: "/",
 			})
 			.status(201)
 			.json({
 				message: `login ${Model.modelName} successful`,
 				data: user,
+				token,
 			});
 	});
 
