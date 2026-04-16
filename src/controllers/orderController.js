@@ -40,8 +40,7 @@ const createOrder = asyncHandler(async (req, res, next) => {
 			throw new ApiError("Offer not found", 404);
 		}
 
-		const { student } = acceptedOffer.request;
-		const { major } = acceptedOffer.request;
+		const { student, major } = acceptedOffer.request;
 
 		if (!major) {
 			throw new ApiError(
@@ -100,6 +99,8 @@ const createOrder = asyncHandler(async (req, res, next) => {
 			userType: "Student",
 		}).session(session);
 
+		console.log(studentWallet);
+
 		if (!studentWallet) {
 			throw new ApiError("There is no wallet for this user", 404);
 		}
@@ -108,7 +109,7 @@ const createOrder = asyncHandler(async (req, res, next) => {
 			throw new ApiError("Your wallet is locked. Please contact support.", 403);
 		}
 
-		if (studentWallet.balance < acceptedOffer.studentPrice) {
+		if (studentWallet.balanceUSD < acceptedOffer.priceUSD) {
 			throw new ApiError(
 				"You don't have enough balance to create this order",
 				400,
@@ -120,11 +121,9 @@ const createOrder = asyncHandler(async (req, res, next) => {
 		const orderPayload = {
 			student: req.user._id,
 			instructor: acceptedOffer.instructor._id,
-			studentPrice: acceptedOffer.studentPrice,
-			instructorPrice: acceptedOffer.instructorPrice,
+			studentPriceUSD: acceptedOffer.priceUSD,
+			instructorPriceUSD: acceptedOffer.instructorEarningUSD,
 			deadline: acceptedOffer.request.deadline,
-			instructorCurrency: acceptedOffer.instructorCurrency,
-			studentCurrency: acceptedOffer.studentCurrency,
 			paidAt: Date.now(),
 			startedAt: Date.now(),
 			offer: acceptedOffer._id,
@@ -140,20 +139,21 @@ const createOrder = asyncHandler(async (req, res, next) => {
 					wallet: studentWallet._id,
 					type: "debit",
 					status: "completed",
-					amount: createdOrder.studentPrice,
+					amountUSD: createdOrder.studentPriceUSD,
 					reason: "order_create",
 					referenceModel: "Order",
 					referenceId: createdOrder._id,
-					balanceBefore: studentWallet.balance,
-					balanceAfter: studentWallet.balance - createdOrder.studentPrice,
+					balanceBeforeUSD: studentWallet.balanceUSD,
+					balanceAfterUSD:
+						studentWallet.balanceUSD - createdOrder.studentPriceUSD,
 				},
 			],
 			{ session },
 		);
 
 		// 6️⃣ Deduct balance and freeze the order amount
-		studentWallet.balance -= createdOrder.studentPrice;
-		studentWallet.freezedBalance += createdOrder.studentPrice;
+		studentWallet.balanceUSD -= createdOrder.studentPriceUSD;
+		studentWallet.freezedBalanceUSD += createdOrder.studentPriceUSD;
 		await studentWallet.save({ session });
 
 		// ✅ Commit
@@ -344,6 +344,8 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	// // }
 	const event = req.body;
 
+	console.log(event);
+
 	// get offerId from passthrough
 	const orderId = event.data?.passthrough;
 	if (!orderId) {
@@ -414,8 +416,6 @@ const getLoggedUserVideos = asyncHandler(async (req, res, next) => {
 		return next(new ApiError("غير مصرح لك", 403));
 	}
 
-	console.log(order);
-
 	//2- process videos
 	let videos = [];
 	if (order.videos && order.videos.length > 0) {
@@ -485,10 +485,10 @@ const finishAndSubmitOrder = asyncHandler(async (req, res, next) => {
 		}
 
 		// 5️⃣ release money (credit instructor)
-		const instructorBalanceBefore = instructorWallet.balance;
-		instructorWallet.balance += order.instructorPrice;
+		const instructorBalanceBefore = instructorWallet.balanceUSD;
+		instructorWallet.balanceUSD += order.instructorPriceUSD;
 		await instructorWallet.save({ session });
-		studentWallet.freezedBalance -= order.studentPrice;
+		studentWallet.freezedBalanceUSD -= order.studentPriceUSD;
 		await studentWallet.save({ session });
 
 		// 6️⃣ create transaction for instructor
@@ -498,12 +498,12 @@ const finishAndSubmitOrder = asyncHandler(async (req, res, next) => {
 					wallet: instructorWallet._id,
 					type: "credit",
 					status: "completed",
-					amount: order.instructorPrice,
+					amountUSD: order.instructorPriceUSD,
 					reason: "order_completed",
 					referenceId: order._id,
 					referenceModel: "Order",
-					balanceBefore: instructorBalanceBefore,
-					balanceAfter: instructorWallet.balance,
+					balanceBeforeUSD: instructorBalanceBefore,
+					balanceAfterUSD: instructorWallet.balance,
 				},
 			],
 			{ session },
