@@ -557,7 +557,7 @@ const finishAndSubmitOrder = asyncHandler(async (req, res, next) => {
 		}
 
 		// 5️⃣ release money (credit instructor)
-		const instructorBalanceBefore = instructorWallet.balance;
+		const instructorBalanceBefore = instructorWallet.balanceUSD;
 		instructorWallet.balance += order.instructorPrice;
 		await instructorWallet.save({ session });
 		studentWallet.freezedBalance -= order.studentPrice;
