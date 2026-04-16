@@ -338,45 +338,36 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 //@desc get webhook to success
 //@route POST api/v1/orders/mux_webhook //DONE
 const handleMuxWebhook = asyncHandler(async (req, res, next) => {
-	//check video is related to offer
-	// if (!verifyMuxSignature(req)) {
-	// 	return next(new ApiError("Invalid signature", 500));
-	// // }
 	const event = req.body;
 
-	console.log(event);
+	console.log("MUX EVENT:", event.type);
 
-	// get offerId from passthrough
+	// 1️⃣ get orderId
 	const orderId = event.data?.passthrough;
 	if (!orderId) {
 		return res.status(400).json({ message: "Missing orderId in passthrough" });
 	}
 
-	//check order found
-	const order = await Model.findById(orderId);
-	if (!order) {
-		return next(new ApiError("order not found", 504));
-	}
-
-	// update video status
-	// prepare new video object from event
-	const newVideo = {
+	// 2️⃣ prepare video object
+	let newVideo = {
 		status: "waiting",
 		assetId: null,
 		playbackId: null,
 		duration: null,
-		uploadUrl: event.data.passthrough,
+		uploadUrl: orderId,
 		updatedAt: new Date(),
 	};
 
-	// update fields based on event type
+	// 3️⃣ handle event types
 	switch (event.type) {
 		case "video.asset.ready":
-			newVideo.status = "ready";
-			newVideo.assetId = event.data.id;
-			newVideo.playbackId = event.data.playback_ids[0].id;
-			newVideo.duration = event.data.duration;
-			order.status = "submitted"; // mark order submitted
+			newVideo = {
+				...newVideo,
+				status: "ready",
+				assetId: event.data.id,
+				playbackId: event.data.playback_ids?.[0]?.id || null,
+				duration: event.data.duration,
+			};
 			break;
 
 		case "video.asset.failed":
@@ -388,20 +379,97 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 			break;
 
 		default:
-			break;
+			return res.status(200).json({ message: "Event ignored" });
 	}
 
-	// push new video to order.videos array
+	// 4️⃣ update DB (atomic + no duplicates)
+	const updateQuery = {
+		$push: { videos: newVideo },
+	};
+
+	// لو الفيديو ready → حدث حالة الأوردر
 	if (newVideo.status === "ready") {
-		order.videos.push(newVideo);
+		updateQuery.$set = { status: "submitted" };
 	}
 
-	console.log(order);
+	// 5️⃣ prevent duplicates باستخدام assetId
+	const filter = { _id: orderId };
 
-	await order.save();
+	if (newVideo.assetId) {
+		filter["videos.assetId"] = { $ne: newVideo.assetId };
+	}
+
+	const result = await Model.updateOne(filter, updateQuery);
+
+	console.log("Update result:", result);
 
 	return res.status(200).json({ message: "Webhook processed" });
 });
+// const handleMuxWebhook = asyncHandler(async (req, res, next) => {
+// 	//check video is related to offer
+// 	// if (!verifyMuxSignature(req)) {
+// 	// 	return next(new ApiError("Invalid signature", 500));
+// 	// // }
+// 	const event = req.body;
+
+// 	console.log(event);
+
+// 	// get offerId from passthrough
+// 	const orderId = event.data?.passthrough;
+// 	if (!orderId) {
+// 		return res.status(400).json({ message: "Missing orderId in passthrough" });
+// 	}
+
+// 	//check order found
+// 	const order = await Model.findById(orderId);
+// 	if (!order) {
+// 		return next(new ApiError("order not found", 504));
+// 	}
+
+// 	// update video status
+// 	// prepare new video object from event
+// 	const newVideo = {
+// 		status: "waiting",
+// 		assetId: null,
+// 		playbackId: null,
+// 		duration: null,
+// 		uploadUrl: event.data.passthrough,
+// 		updatedAt: new Date(),
+// 	};
+
+// 	// update fields based on event type
+// 	switch (event.type) {
+// 		case "video.asset.ready":
+// 			newVideo.status = "ready";
+// 			newVideo.assetId = event.data.id;
+// 			newVideo.playbackId = event.data.playback_ids[0].id;
+// 			newVideo.duration = event.data.duration;
+// 			order.status = "submitted"; // mark order submitted
+// 			break;
+
+// 		case "video.asset.failed":
+// 			newVideo.status = "failed";
+// 			break;
+
+// 		case "video.uploading":
+// 			newVideo.status = "processing";
+// 			break;
+
+// 		default:
+// 			break;
+// 	}
+
+// 	// push new video to order.videos array
+// 	if (newVideo.status === "ready") {
+// 		order.videos.push(newVideo);
+// 	}
+
+// 	console.log(order);
+
+// 	await order.save();
+
+// 	return res.status(200).json({ message: "Webhook processed" });
+// });
 
 //@desc get video with token
 //@route GET /api/v1/orders/videos
