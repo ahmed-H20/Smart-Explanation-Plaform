@@ -1,5 +1,8 @@
+require("dotenv").config();
+
+const { default: mongoose } = require("mongoose");
 const cron = require("node-cron");
-const Subscription = require("../models/subscriptionModel"); // adjust path
+const Subscription = require("../models/subscriptionModel");
 
 /**
  * Subscription Expiry Cron Job
@@ -17,7 +20,7 @@ const Subscription = require("../models/subscriptionModel"); // adjust path
  * To run every hour instead: "0 * * * *"
  */
 const expireSubscriptions = cron.schedule(
-	"0 0 * * *",
+	"* * * * *",
 	async () => {
 		try {
 			const now = new Date();
@@ -36,6 +39,8 @@ const expireSubscriptions = cron.schedule(
 				console.log(
 					`[Cron] Subscription expiry — ${result.modifiedCount} subscription(s) marked as expired at ${now.toISOString()}`,
 				);
+			} else {
+				console.log("test corn sucsses");
 			}
 		} catch (err) {
 			console.error("[Cron] Subscription expiry job failed:", err.message);
@@ -47,5 +52,4 @@ const expireSubscriptions = cron.schedule(
 	},
 );
 
-// Start the cron after DB connects
-expireSubscriptions.start();
+module.exports = expireSubscriptions;

@@ -19,8 +19,10 @@ const OrderRoutes = require("./src/routes/orderRoutes");
 const AssignmentRoutes = require("./src/routes/assignmentRoutes");
 const SubscriptionPlanRoutes = require("./src/routes/subscriptionplanRoutes");
 const Subscription = require("./src/routes/subscriptionRoutes");
+const HourlyPrices = require("./src/routes/CountryHourlyPricingRoutes");
 const { connectRedis } = require("./src/config/redis");
-const expireSubscriptions = require("./src/jobs/Expiresubscriptions");
+const expireSubscriptions = require("./src/crons/Expiresubscriptions");
+const responseFormatter = require("./src/middlewares/responseFormatter");
 
 // Create app
 const app = express();
@@ -35,6 +37,7 @@ connectRedis();
 app.use(morgan("dev")); //logging
 app.use(express.json());
 app.use(express.static(path.join("upload"))); //to make url for statics files
+app.use(responseFormatter);
 
 // Mount Routes
 app.use("/api/v1/instructors", InstructorRoutes);
@@ -51,6 +54,7 @@ app.use("/api/v1/orders", OrderRoutes);
 app.use("/api/v1/assignments", AssignmentRoutes);
 app.use("/api/v1/subscriptionPlan", SubscriptionPlanRoutes);
 app.use("/api/v1/subscriptions", Subscription);
+app.use("/api/v1/hourlyPrices", HourlyPrices);
 
 // Not found route
 app.use((req, res, next) => {

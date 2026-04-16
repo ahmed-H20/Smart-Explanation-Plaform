@@ -259,10 +259,22 @@ const setEstimatedTimeAndPriceValidator = [
 		.isMongoId()
 		.withMessage("id العرض غير صحيح")
 		.custom(async (val, { req }) => {
-			const offer = await Offer.findById(val);
+			const offer = await Offer.findById(val).populate([
+				{
+					path: "request",
+					populate: {
+						path: "student",
+						select: "fullName email country wallet",
+					},
+				},
+				{
+					path: "instructor",
+					select: "fullName email country wallet",
+				},
+			]);
 			if (!offer) throw new Error("هذا العرض غير موجود");
 
-			if (offer.instructor.toString() !== req.user._id.toString())
+			if (offer.instructor._id.toString() !== req.user._id.toString())
 				throw new Error("ليس لديك الصلاحية للتعديل على هذا العرض");
 
 			if (!["accepted"].includes(offer.status))

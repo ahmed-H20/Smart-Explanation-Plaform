@@ -40,21 +40,13 @@ const orderSchema = mongoose.Schema(
 		},
 		paidBySubscription: Boolean,
 		subscription: String,
-		studentPrice: {
+		studentPriceUSD: {
 			type: Number,
 			required: [true, "studentPrice is required"],
 		},
-		instructorPrice: {
+		instructorPriceUSD: {
 			type: Number,
 			required: [true, "instructorPrice is required"],
-		},
-		studentCurrency: {
-			type: String,
-			required: [true, "student currency is required"],
-		},
-		instructorCurrency: {
-			type: String,
-			required: [true, "instructor currency is required"],
 		},
 		deadline: {
 			type: Date,

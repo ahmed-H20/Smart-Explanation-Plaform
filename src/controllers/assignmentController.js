@@ -21,17 +21,12 @@ const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
 // @route POST /api/v1/assignments/createRequests
 // @access private student
 const createRequest = asyncHandler(async (req, res, next) => {
-	console.log(
-		"assignmentInstructorPrice",
-		((req.body.budget * 13 * 40) / 100).toFixed(2),
-	);
-
 	// 1- create request
 	const request = await Request.create({
 		...req.body,
 		type: "assignment",
 		student: req.user._id,
-		assignmentInstructorPrice: ((req.body.budget * 13 * 40) / 100).toFixed(2),
+		assignmentInstructorPrice: ((req.body.budget * 13 * 40) / 100).toFixed(2), // 40% of budget
 	});
 
 	await request.populate({

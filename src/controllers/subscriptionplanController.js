@@ -29,19 +29,18 @@ const getSubscriptionPlan = getDocument(
  * @access  Private (Admin)
  */ //DONE
 const createSubscriptionPlan = asyncHandler(async (req, res) => {
-	const { name, durationDays, price, currency, isActive } = req.body;
+	const { name, durationDays, priceUSD, countries, isActive } = req.body;
 
 	if (!name) throw new ApiError("Plan name is required", 400);
 	if (!durationDays) throw new ApiError("durationDays is required", 400);
-	if (price === undefined || price === null)
+	if (priceUSD === undefined || priceUSD === null)
 		throw new ApiError("price is required", 400);
-	if (!currency) throw new ApiError("currency is required", 400);
 
 	const plan = await SubscriptionPlan.create({
 		name,
 		durationDays,
-		price,
-		currency,
+		priceUSD,
+		countries: countries || [],
 		...(isActive !== undefined && { isActive }),
 	});
 

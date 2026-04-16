@@ -384,7 +384,7 @@ const chargeWalletManually = asyncHandler(async (req, res, next) => {
 
 	try {
 		const { id } = req.params;
-		const { balance } = req.body;
+		const { balance } = req.body; // in dollar
 
 		if (!balance || Number.isNaN(Number(balance)) || Number(balance) <= 0) {
 			throw new ApiError("Amount must be a positive number.", 400);
@@ -395,8 +395,10 @@ const chargeWalletManually = asyncHandler(async (req, res, next) => {
 		const wallet = await Wallet.findById(id).session(session);
 		if (!wallet) throw new ApiError("Wallet not found.", 404);
 
-		const balanceBefore = wallet.balance;
-		wallet.balance += numericBalance;
+		console.log("wallet", wallet);
+
+		const balanceBefore = wallet.balanceUSD;
+		wallet.balanceUSD += numericBalance;
 		await wallet.save({ session });
 
 		await Transaction.create(
@@ -410,7 +412,7 @@ const chargeWalletManually = asyncHandler(async (req, res, next) => {
 					referenceId: wallet._id,
 					referenceModel: "Wallet",
 					balanceBefore,
-					balanceAfter: wallet.balance,
+					balanceAfter: wallet.balanceUSD,
 				},
 			],
 			{ session },

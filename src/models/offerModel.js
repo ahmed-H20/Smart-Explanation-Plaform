@@ -39,12 +39,9 @@ const offerSchema = mongoose.Schema(
 			updatedAt: Date,
 		},
 
-		studentPrice: {
-			type: Number,
-			// required: [true, "studentPrice is required"],
-		},
-
-		instructorPrice: Number,
+		priceUSD: Number, // total price
+		instructorEarningUSD: Number,
+		platformProfitUSD: Number,
 
 		status: {
 			type: String,
@@ -55,16 +52,6 @@ const offerSchema = mongoose.Schema(
 		isDeleted: {
 			type: Boolean,
 			default: false,
-		},
-
-		studentCurrency: {
-			type: String,
-			required: [true, "Student currency is required"],
-		},
-
-		instructorCurrency: {
-			type: String,
-			required: [true, "Instructor currency is required"],
 		},
 
 		allFiles: [String],

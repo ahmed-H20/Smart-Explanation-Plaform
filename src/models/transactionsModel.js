@@ -21,7 +21,7 @@ const transactionsSchema = new mongoose.Schema(
 			enum: ["pending", "completed", "failed"],
 			required: [true, "Transaction status is required"],
 		},
-		amount: {
+		amountUSD: {
 			type: Number,
 			required: [true, "Transaction amount is required"],
 			min: [0.01, "Amount must be greater than 0"],
@@ -64,11 +64,11 @@ const transactionsSchema = new mongoose.Schema(
 			enum: ["Order", "Wallet", "Subscription"],
 			required: true,
 		},
-		balanceBefore: {
+		balanceBeforeUSD: {
 			type: Number,
 			required: [true, "Balance before transaction is required"],
 		},
-		balanceAfter: {
+		balanceAfterUSD: {
 			type: Number,
 			required: [true, "Balance after transaction is required"],
 		},
@@ -136,9 +136,9 @@ transactionsSchema.post("save", async function (doc) {
     <table style="width:100%;border-collapse:collapse;margin-top:15px;">
       <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Type</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.type}</td></tr>
       <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Status</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.status}</td></tr>
-      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Amount</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.amount} ${currencyCode}</td></tr>
-      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Balance Before</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.balanceBefore} ${currencyCode}</td></tr>
-      <tr><td style="padding:8px;"><strong>Balance After</strong></td><td style="padding:8px;">${doc.balanceAfter} ${currencyCode}</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Amount</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.amountUSD} ${currencyCode}</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Balance Before</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.balanceBeforeUSD} ${currencyCode}</td></tr>
+      <tr><td style="padding:8px;"><strong>Balance After</strong></td><td style="padding:8px;">${doc.balanceAfterUSD} ${currencyCode}</td></tr>
     </table>
     <p style="margin-top:20px;">If you did not initiate this transaction, please contact support immediately.</p>
     <p style="margin-top:30px;font-size:12px;color:#888;">© ${new Date().getFullYear()} Your Platform. All rights reserved.</p>
@@ -161,7 +161,7 @@ transactionsSchema.post("save", async function (doc) {
     <p><strong>Platform:</strong> ${doc.platform}</p>
     <p><strong>Type:</strong> ${doc.type}</p>
     <p><strong>Status:</strong> ${doc.status}</p>
-    <p><strong>Amount:</strong> ${doc.amount} ${currencyCode}</p>
+    <p><strong>Amount:</strong> ${doc.amountUSD} ${currencyCode}</p>
     <p><strong>Reason:</strong> ${doc.reason}</p>
     <p><strong>Date:</strong> ${doc.createdAt.toISOString()}</p>
   </div>

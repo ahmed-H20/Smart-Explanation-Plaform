@@ -22,7 +22,7 @@ module.exports = {
 		},
 		{
 			name: "corn",
-			script: "src/jobs/Expiresubscriptions.js",
+			script: "src/crons/Expiresubscriptions.js",
 			instances: 1,
 			autorestart: true,
 			watch: false,

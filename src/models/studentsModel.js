@@ -101,13 +101,14 @@ studentSchema.pre("save", async function () {
 });
 
 // Create User Wallet
-async function createWallet() {
+
+studentSchema.pre("save", async function createWallet() {
 	if (!this.isNew) return;
 
 	// Get Country
 	const country = await Country.findById(this.country);
 	if (!country) {
-		return new Error("الدولة غير موجودة");
+		throw new Error("الدولة غير موجودة");
 	}
 
 	// Create Wallet
@@ -118,8 +119,7 @@ async function createWallet() {
 	});
 
 	this.wallet = wallet._id;
-}
-studentSchema.pre("save", createWallet);
+});
 
 const studentModel = mongoose.model("Student", studentSchema);
 module.exports = studentModel;

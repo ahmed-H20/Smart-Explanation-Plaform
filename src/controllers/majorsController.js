@@ -16,6 +16,7 @@ const fieldIdFromNestedRoute = (req, res, next) => {
 // Nested route middleware
 const filterObject = (req, res, next) => {
 	const findObject = req.params.fieldId ? { field: req.params.fieldId } : {};
+
 	req.findObject = findObject;
 	next();
 };

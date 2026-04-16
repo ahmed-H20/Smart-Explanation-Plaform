@@ -6,6 +6,7 @@ const axios = require("axios");
 const { getAllDocuments, updateDocument } = require("./handlerFactory");
 const Model = require("../models/offerModel");
 const ApiError = require("../utils/ApiError");
+const hoursPrice = require("../models/CountryHourlyPricingModel");
 
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
 const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
@@ -341,27 +342,40 @@ const acceptOffer = asyncHandler(async (req, res, next) => {
 const setEstimatedTimeAndPrice = asyncHandler(async (req, res, next) => {
 	const { estimatedTime } = req.body;
 
+	// 1- get offer
 	const offer = req.offerDoc;
 
+	// 2- get all hoursPrice
+	const countries = [offer.request.student.country, offer.instructor.country];
+
+	const pricingList = await hoursPrice.find({
+		countryId: { $in: countries },
+	});
+
+	// 3- reformat pricing data to easily get price by country
+	const pricingData = pricingList.reduce((acc, obj) => {
+		acc[obj.countryId._id.toString()] = obj;
+		return acc;
+	}, {});
+
+	// Price in USD =  rate in USD * estimated time
 	const studentPrice =
-		offer.studentCurrency === "SAR" ? estimatedTime * 40 : estimatedTime * 200;
+		pricingData[offer.request.student.country].studentHourlyRateUSD *
+		estimatedTime;
 
 	const instructorPrice =
-		offer.instructorCurrency === "SAR"
-			? estimatedTime * 40
-			: estimatedTime * 200;
+		pricingData[offer.instructor.country].instructorHourlyRateUSD *
+		estimatedTime;
 
-	offer.instructorPrice = instructorPrice;
-	offer.studentPrice = studentPrice;
+	offer.priceUSD = studentPrice;
+	offer.instructorEarningUSD = instructorPrice;
+	offer.platformProfitUSD = studentPrice - instructorPrice;
 	offer.estimatedTime = estimatedTime;
 
 	await offer.save();
 
 	res.status(200).json({ message: "offer price set", offer: offer });
 });
-// 1 hour -> 40SA -> 200LE
-
-// create order
 
 module.exports = {
 	getUploadVideoUrl,
