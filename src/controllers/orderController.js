@@ -396,6 +396,8 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 		order.videos.push(newVideo);
 	}
 
+	console.log(order);
+
 	await order.save();
 
 	return res.status(200).json({ message: "Webhook processed" });
