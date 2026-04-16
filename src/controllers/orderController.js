@@ -344,6 +344,8 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	// // }
 	const event = req.body;
 
+	console.log(event);
+
 	// get offerId from passthrough
 	const orderId = event.data?.passthrough;
 	if (!orderId) {
