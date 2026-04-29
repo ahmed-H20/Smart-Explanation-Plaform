@@ -31,7 +31,7 @@ const offerSchema = mongoose.Schema(
 			},
 			status: {
 				type: String,
-				enum: ["waiting", "processing", "ready", "failed"],
+				enum: ["waiting", "processing", "ready", "failed", "without videos"],
 				default: "waiting",
 			},
 			duration: Number,
@@ -59,6 +59,14 @@ const offerSchema = mongoose.Schema(
 	{
 		timestamps: true,
 		strict: "throw",
+	},
+);
+
+offerSchema.index(
+	{ request: 1, instructor: 1 },
+	{
+		unique: true,
+		partialFilterExpression: { isDeleted: false },
 	},
 );
 

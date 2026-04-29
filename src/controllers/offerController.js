@@ -2,6 +2,7 @@ const crypto = require("crypto");
 
 const asyncHandler = require("express-async-handler");
 const axios = require("axios");
+const mongoose = require("mongoose");
 
 const { getAllDocuments, updateDocument } = require("./handlerFactory");
 const Model = require("../models/offerModel");
@@ -39,8 +40,6 @@ const fileLocalUpdate = (req, res, next) => {
 const verifyMuxSignature = (req) => {
 	const secret = process.env.MUX_WEBHOOK_SECRET;
 
-	console.log(secret);
-
 	const signatureHeader = req.headers["mux-signature"];
 
 	const parts = signatureHeader.split(",");
@@ -50,10 +49,6 @@ const verifyMuxSignature = (req) => {
 		.createHmac("sha256", secret)
 		.update(req.body) // raw body
 		.digest("hex");
-
-	console.log("hash: ", hash);
-
-	console.log("signature: ", signature);
 
 	return hash === signature;
 };
@@ -256,8 +251,6 @@ const getOffer = asyncHandler(async (req, res, next) => {
 		videoLinks = await createMuxPlaybackTokens(offer.demoVideo.playbackId);
 	}
 
-	console.log(offer);
-
 	res.status(200).json({ data: offer, videoLinks: videoLinks });
 });
 
@@ -291,8 +284,6 @@ const deleteOffer = asyncHandler(async (req, res, next) => {
 const cancelOffer = asyncHandler(async (req, res, next) => {
 	const offer = req.offerDoc;
 
-	console.log(offer);
-
 	offer.status = "cancelled";
 
 	await offer.save();
@@ -317,6 +308,115 @@ const acceptOffer = asyncHandler(async (req, res, next) => {
 	offer.status = "accepted";
 	offer.allFiles = req.body.allFiles || [];
 	await offer.save();
+
+	await sendEmail({
+		to: offer.request.student.email,
+		subject: "You Accepted the Offer! 🎉",
+		html: studentAcceptedOfferTemplate(offer, offer.request.student.fullName),
+	});
+
+	await sendEmail({
+		to: offer.instructor.email,
+		subject: "Student Accepted Your Offer ✅",
+		html: instructorOfferAcceptedTemplate(offer, offer.instructor.fullName),
+	});
+
+	res.status(200).json({
+		message: "Offer accepted",
+		offer,
+	});
+});
+
+// @desc create offer (Direct Request)
+// @route POST api/v1/offers/direct
+// @access privet Instructor
+const createDirectOffer = asyncHandler(async (req, res) => {
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		const { request } = req;
+		const { estimateTime } = req.body;
+
+		const offer = await Model.create(
+			[
+				{
+					request: request._id,
+					instructor: req.user._id,
+					estimatedTime: estimateTime,
+					demoVideo: {
+						status: "without videos",
+					},
+				},
+			],
+			{ session },
+		);
+
+		const countries = [request.student.country, req.user.country._id];
+
+		const pricingList = await hoursPrice
+			.find({
+				countryId: { $in: countries },
+			})
+			.session(session);
+
+		const pricingData = pricingList.reduce((acc, obj) => {
+			acc[obj.countryId._id.toString()] = obj;
+			return acc;
+		}, {});
+
+		const studentPrice =
+			pricingData[request.student.country].studentHourlyRateUSD * estimateTime;
+
+		const instructorPrice =
+			pricingData[req.user.country._id].instructorHourlyRateUSD * estimateTime;
+
+		offer[0].priceUSD = studentPrice;
+		offer[0].instructorEarningUSD = instructorPrice;
+		offer[0].platformProfitUSD = studentPrice - instructorPrice;
+		offer[0].estimatedTime = estimateTime;
+
+		await offer[0].save({ session });
+
+		await session.commitTransaction();
+		session.endSession();
+
+		res.status(201).json({
+			message: "Offer created successfully",
+			offer: offer[0],
+		});
+	} catch (error) {
+		await session.abortTransaction();
+		session.endSession();
+		throw error;
+	}
+});
+
+// @desc accept one offers by id (Direct Request)
+// @route PATCH api/v1/offers/:id/accept
+// @access privet student
+const acceptOfferForDirectRequest = asyncHandler(async (req, res, next) => {
+	const { offer } = req; // already fetched in validator
+
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		await Model.updateMany(
+			{ request: offer.request._id, _id: { $ne: offer._id } },
+			{ $set: { status: "rejected" } },
+			{ session },
+		);
+
+		offer.status = "accepted";
+		offer.allFiles = offer.request.files;
+		await offer.save({ session });
+
+		await session.commitTransaction();
+	} catch (err) {
+		await session.abortTransaction();
+		throw err;
+	}
 
 	await sendEmail({
 		to: offer.request.student.email,
@@ -392,4 +492,7 @@ module.exports = {
 	uploadFiles,
 	fileLocalUpdate,
 	setEstimatedTimeAndPrice,
+	// Direct
+	createDirectOffer,
+	acceptOfferForDirectRequest,
 };

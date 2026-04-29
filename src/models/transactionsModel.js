@@ -99,6 +99,7 @@ transactionsSchema.index({ status: 1, reason: 1 });
 transactionsSchema.pre(/^find/, function () {
 	this.populate({
 		path: "wallet",
+		select: "userId userType",
 		populate: {
 			path: "userId",
 			select: "fullName email",
@@ -136,9 +137,9 @@ transactionsSchema.post("save", async function (doc) {
     <table style="width:100%;border-collapse:collapse;margin-top:15px;">
       <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Type</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.type}</td></tr>
       <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Status</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.status}</td></tr>
-      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Amount</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.amountUSD} ${currencyCode}</td></tr>
-      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Balance Before</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.balanceBeforeUSD} ${currencyCode}</td></tr>
-      <tr><td style="padding:8px;"><strong>Balance After</strong></td><td style="padding:8px;">${doc.balanceAfterUSD} ${currencyCode}</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Amount</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.amountUSD} USD</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;"><strong>Balance Before</strong></td><td style="padding:8px;border-bottom:1px solid #eee;">${doc.balanceBeforeUSD} USD</td></tr>
+      <tr><td style="padding:8px;"><strong>Balance After</strong></td><td style="padding:8px;">${doc.balanceAfterUSD} USD</td></tr>
     </table>
     <p style="margin-top:20px;">If you did not initiate this transaction, please contact support immediately.</p>
     <p style="margin-top:30px;font-size:12px;color:#888;">© ${new Date().getFullYear()} Your Platform. All rights reserved.</p>
@@ -161,7 +162,7 @@ transactionsSchema.post("save", async function (doc) {
     <p><strong>Platform:</strong> ${doc.platform}</p>
     <p><strong>Type:</strong> ${doc.type}</p>
     <p><strong>Status:</strong> ${doc.status}</p>
-    <p><strong>Amount:</strong> ${doc.amountUSD} ${currencyCode}</p>
+    <p><strong>Amount:</strong> ${doc.amountUSD} USD</p>
     <p><strong>Reason:</strong> ${doc.reason}</p>
     <p><strong>Date:</strong> ${doc.createdAt.toISOString()}</p>
   </div>

@@ -9,6 +9,8 @@ const {
 	getAllDocuments,
 } = require("./handlerFactory");
 const ApiFeatures = require("../utils/ApiFeatures");
+const studentModel = require("../models/studentsModel");
+const instructorModel = require("../models/instructorsModel");
 
 // @route POST /transitions
 // @access private admin
@@ -27,11 +29,24 @@ const getAllTransaction = getAllDocuments(Transactions, Transactions.modelName);
 // @desc get all specific user trans
 // @route GET /transitions/user/:userId
 // @access private admin
-const getAllUserTransactions = asyncHandler(async (req, res, next) => {
-	const { userId } = req.params;
+const getUserTransactions = asyncHandler(async (req, res, next) => {
+	const { email } = req.body;
+
+	const user =
+		(await studentModel.findOne({ email })) ||
+		(await instructorModel.findOne({ email }));
+
+	if (!user) {
+		return next(new ApiError("No user for this email", 404));
+	}
+
+	const userType = user.constructor.modelName;
 
 	// 1- find the user's wallet (Student or Instructor)
-	const wallet = await Wallet.findOne({ userId });
+	const wallet = await Wallet.findOne({
+		userId: user._id,
+		userType,
+	});
 	if (!wallet) {
 		return next(new ApiError("This user has no wallet", 504));
 	}
@@ -72,7 +87,7 @@ module.exports = {
 	createTransaction,
 	getOneTransactionById,
 	getAllTransaction,
-	getAllUserTransactions,
+	getUserTransactions,
 };
 
 /*

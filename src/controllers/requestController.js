@@ -154,8 +154,6 @@ const changeRequestStatus = asyncHandler(async (req, res, next) => {
 const cancelRequest = asyncHandler(async (req, res, next) => {
 	const request = req.requestDoc;
 
-	console.log("cancel: ", request);
-
 	request.status = "cancelled";
 
 	await request.save();

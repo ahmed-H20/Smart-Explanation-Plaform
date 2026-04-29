@@ -4,6 +4,9 @@ const mongoose = require("mongoose");
 const Wallet = require("../models/walletModel");
 const Transaction = require("../models/transactionsModel");
 const ApiError = require("../utils/ApiError");
+const studentModel = require("../models/studentsModel");
+const instructorModel = require("../models/instructorsModel");
+const ApiFeatures = require("../utils/ApiFeatures");
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -68,7 +71,9 @@ const getLoggedUserWallet = asyncHandler(async (req, res, next) => {
 const getLoggedUserBalance = asyncHandler(async (req, res, next) => {
 	const wallet = await getWalletOrFail(req.user._id, { checkLock: false });
 
-	res.status(200).json({ status: "success", data: wallet.balance });
+	res
+		.status(200)
+		.json({ status: "success", data: { balanceUSD: wallet.balanceUSD } });
 });
 
 // @desc    Get logged user freezed balance
@@ -77,7 +82,10 @@ const getLoggedUserBalance = asyncHandler(async (req, res, next) => {
 const getLoggedUserFreezedBalance = asyncHandler(async (req, res, next) => {
 	const wallet = await getWalletOrFail(req.user._id, { checkLock: false });
 
-	res.status(200).json({ status: "success", data: wallet.freezedBalance });
+	res.status(200).json({
+		status: "success",
+		data: { freezedBalanceUSD: wallet.freezedBalanceUSD },
+	});
 });
 
 // @desc    Get logged user transactions (paginated, newest first)
@@ -122,9 +130,13 @@ const requestWithdraw = asyncHandler(async (req, res, next) => {
 	session.startTransaction();
 
 	try {
-		const { amount, platform } = req.body;
+		const { amountUSD, platform } = req.body;
 
-		if (!amount || Number.isNaN(Number(amount)) || Number(amount) <= 0) {
+		if (
+			!amountUSD ||
+			Number.isNaN(Number(amountUSD)) ||
+			Number(amountUSD) <= 0
+		) {
 			throw new ApiError("Amount must be a positive number.", 400);
 		}
 
@@ -135,7 +147,7 @@ const requestWithdraw = asyncHandler(async (req, res, next) => {
 			);
 		}
 
-		const numericAmount = Number(amount);
+		const numericAmount = Number(amountUSD);
 
 		// findOneAndUpdate with $inc is atomic — prevents race conditions /
 		// double-withdraw without needing an extra lock document.
@@ -143,12 +155,12 @@ const requestWithdraw = asyncHandler(async (req, res, next) => {
 			{
 				userId: req.user._id,
 				isLocked: false,
-				balance: { $gte: numericAmount }, // sufficient balance guard
+				balanceUSD: { $gte: numericAmount }, // sufficient balance guard
 			},
 			{
 				$inc: {
-					balance: -numericAmount,
-					freezedBalance: numericAmount,
+					balanceUSD: -numericAmount,
+					freezedBalanceUSD: numericAmount,
 				},
 			},
 			{ new: true, session },
@@ -160,11 +172,11 @@ const requestWithdraw = asyncHandler(async (req, res, next) => {
 				session,
 			);
 			if (!existing) throw new ApiError("Wallet not found.", 404);
-			if (existing.isLocked) throw new ApiError("Wallet is locked.", 403);
-			throw new ApiError("Insufficient balance.", 400);
+			if (existing.isLocked) throw new ApiError("المحفظة مغلقة!", 403);
+			throw new ApiError("رصيد غير كافى!", 400);
 		}
 
-		const balanceBefore = wallet.balance + numericAmount; // value before the deduction
+		const balanceBeforeUSD = wallet.balanceUSD + numericAmount; // value before the deduction
 
 		const transaction = await Transaction.create(
 			[
@@ -172,13 +184,13 @@ const requestWithdraw = asyncHandler(async (req, res, next) => {
 					wallet: wallet._id,
 					type: "debit",
 					status: "pending",
-					amount: numericAmount,
+					amountUSD: numericAmount,
 					reason: "withdraw",
 					referenceId: wallet._id,
 					referenceModel: "Wallet",
-					balanceBefore,
+					balanceBeforeUSD,
 					platform,
-					balanceAfter: wallet.balance,
+					balanceAfterUSD: wallet.balanceUSD,
 				},
 			],
 			{ session },
@@ -191,8 +203,8 @@ const requestWithdraw = asyncHandler(async (req, res, next) => {
 			status: "success",
 			message: "Withdrawal request submitted and is pending admin approval.",
 			data: {
-				balance: wallet.balance,
-				freezedBalance: wallet.freezedBalance,
+				balance: `${wallet.balanceUSD} USD`,
+				freezedBalance: `${wallet.freezedBalanceUSD} USD`,
 				transaction: transaction._id,
 				wallet,
 			},
@@ -216,16 +228,23 @@ const approveWithdraw = asyncHandler(async (req, res, next) => {
 	session.startTransaction();
 
 	try {
-		const transaction = await getPendingWithdrawOrFail(req.params.id, {
-			session,
-		});
+		const transaction = await getPendingWithdrawOrFail(
+			req.params.transactionID,
+			{
+				session,
+			},
+		);
 
 		const wallet = await Wallet.findOneAndUpdate(
 			{
 				_id: transaction.wallet,
-				freezedBalance: { $gte: transaction.amount }, // safety guard
+				freezedBalanceUSD: { $gte: transaction.amountUSD }, // safety guard
 			},
-			{ $inc: { freezedBalance: -transaction.amount } },
+			{
+				$inc: {
+					freezedBalanceUSD: -transaction.amountUSD, // from freezed balance to cash
+				},
+			},
 			{ new: true, session },
 		);
 
@@ -262,19 +281,22 @@ const rejectWithdraw = asyncHandler(async (req, res, next) => {
 	session.startTransaction();
 
 	try {
-		const transaction = await getPendingWithdrawOrFail(req.params.id, {
-			session,
-		});
+		const transaction = await getPendingWithdrawOrFail(
+			req.params.transactionID,
+			{
+				session,
+			},
+		);
 
 		const wallet = await Wallet.findOneAndUpdate(
 			{
 				_id: transaction.wallet,
-				freezedBalance: { $gte: transaction.amount },
+				freezedBalanceUSD: { $gte: transaction.amountUSD },
 			},
 			{
 				$inc: {
-					freezedBalance: -transaction.amount,
-					balance: transaction.amount,
+					freezedBalanceUSD: -transaction.amountUSD,
+					balanceUSD: transaction.amountUSD,
 				},
 			},
 			{ new: true, session },
@@ -309,7 +331,7 @@ const rejectWithdraw = asyncHandler(async (req, res, next) => {
 // @route   PATCH /wallet/withdraw/:id/receipt
 // @access  Private (admin)
 const uploadWithdrawReceipt = asyncHandler(async (req, res, next) => {
-	const { id } = req.params;
+	const { transactionID } = req.params;
 
 	// Expect the upload middleware to place the URL in req.receiptUrl
 	// (or fall back to req.body.receiptUrl for manual testing)
@@ -319,19 +341,53 @@ const uploadWithdrawReceipt = asyncHandler(async (req, res, next) => {
 	}
 
 	const transaction = await Transaction.findOneAndUpdate(
-		{ _id: id, reason: "withdraw" },
-		{ receipt: receiptUrl },
+		{ _id: transactionID, reason: "withdraw", receipt: null },
+		{ receipt: `${process.env.BASE_URL}/receipts/${receiptUrl}` },
 		{ new: true, runValidators: true },
 	);
 
 	if (!transaction) {
-		return next(new ApiError("Withdraw transaction not found.", 404));
+		return next(
+			new ApiError(
+				"Withdraw transaction not found or you already upload receipt",
+				404,
+			),
+		);
 	}
 
 	res.status(200).json({
 		status: "success",
 		message: "Receipt uploaded successfully.",
 		data: transaction,
+	});
+});
+
+//@desc get all requests
+//@route GET /wallets/withdrawelRequests
+// @access  Private (admin)
+const getAllWithdrawalRequests = asyncHandler(async (req, res, next) => {
+	const documentsCount = await Transaction.countDocuments();
+	// Query build
+	const productsData = new ApiFeatures(
+		Transaction.find({
+			reason: "withdraw",
+		}),
+		req.query,
+	)
+		.filter()
+		.search()
+		.build()
+		.pagination(documentsCount)
+		.limitation()
+		.sort();
+
+	const { mongooseQuery, pagination } = productsData;
+
+	const document = await mongooseQuery;
+	res.status(200).json({
+		paginationResults: pagination,
+		results: document.length,
+		data: document,
 	});
 });
 
@@ -343,8 +399,20 @@ const uploadWithdrawReceipt = asyncHandler(async (req, res, next) => {
 // @route   PUT /wallet/lock/:id
 // @access  Private (admin)
 const lockWallet = asyncHandler(async (req, res, next) => {
+	const { email } = req.body;
+
+	const user =
+		(await studentModel.findOne({ email })) ||
+		(await instructorModel.findOne({ email }));
+
+	if (!user) {
+		return next(new ApiError("No user for this email", 404));
+	}
+
+	const userType = user.constructor.modelName;
+
 	const wallet = await Wallet.findOneAndUpdate(
-		{ userId: req.params.id },
+		{ userId: user._id, userType },
 		{ isLocked: true },
 		{ new: true },
 	);
@@ -353,7 +421,7 @@ const lockWallet = asyncHandler(async (req, res, next) => {
 
 	res.status(200).json({
 		status: "success",
-		message: `Wallet for user ${req.params.id} is locked 🔒`,
+		message: `Wallet for user ${user.fullName} is locked 🔒`,
 	});
 });
 
@@ -361,9 +429,21 @@ const lockWallet = asyncHandler(async (req, res, next) => {
 // @route   PUT /wallet/unlock/:id
 // @access  Private (admin)
 const unLockWallet = asyncHandler(async (req, res, next) => {
+	const { email } = req.body;
+
+	const user =
+		(await studentModel.findOne({ email })) ||
+		(await instructorModel.findOne({ email }));
+
+	if (!user) {
+		return next(new ApiError("No user for this email", 404));
+	}
+
+	const userType = user.constructor.modelName;
+
 	const wallet = await Wallet.findOneAndUpdate(
-		{ userId: req.params.id },
-		{ isLocked: false },
+		{ userId: user._id, userType },
+		{ isLocked: true },
 		{ new: true },
 	);
 	if (!wallet)
@@ -371,7 +451,7 @@ const unLockWallet = asyncHandler(async (req, res, next) => {
 
 	res.status(200).json({
 		status: "success",
-		message: `Wallet for user ${req.params.id} is unlocked 🔓`,
+		message: `Wallet for user ${user.fullName} is unlocked 🔓`,
 	});
 });
 
@@ -383,8 +463,19 @@ const chargeWalletManually = asyncHandler(async (req, res, next) => {
 	session.startTransaction();
 
 	try {
-		const { id } = req.params;
-		const { balance } = req.body; // in dollar
+		const { email } = req.body;
+
+		const user =
+			(await studentModel.findOne({ email })) ||
+			(await instructorModel.findOne({ email }));
+
+		if (!user) {
+			return next(new ApiError("No user for this email", 404));
+		}
+
+		const userType = user.constructor.modelName;
+
+		const balance = req.body.balanceUSD; // in dollar
 
 		if (!balance || Number.isNaN(Number(balance)) || Number(balance) <= 0) {
 			throw new ApiError("Amount must be a positive number.", 400);
@@ -392,12 +483,12 @@ const chargeWalletManually = asyncHandler(async (req, res, next) => {
 
 		const numericBalance = Number(balance);
 
-		const wallet = await Wallet.findById(id).session(session);
+		const wallet = await Wallet.findOne({ userId: user._id, userType }).session(
+			session,
+		);
 		if (!wallet) throw new ApiError("Wallet not found.", 404);
 
-		console.log("wallet", wallet);
-
-		const balanceBefore = wallet.balanceUSD;
+		const balanceBeforeUSD = wallet.balanceUSD;
 		wallet.balanceUSD += numericBalance;
 		await wallet.save({ session });
 
@@ -407,12 +498,12 @@ const chargeWalletManually = asyncHandler(async (req, res, next) => {
 					wallet: wallet._id,
 					type: "credit",
 					status: "completed",
-					amount: numericBalance,
+					amountUSD: numericBalance,
 					reason: "manual_charge_by_admin",
 					referenceId: wallet._id,
 					referenceModel: "Wallet",
-					balanceBefore,
-					balanceAfter: wallet.balanceUSD,
+					balanceBeforeUSD,
+					balanceAfterUSD: wallet.balanceUSD,
 				},
 			],
 			{ session },
@@ -445,6 +536,7 @@ module.exports = {
 	approveWithdraw,
 	rejectWithdraw,
 	uploadWithdrawReceipt,
+	getAllWithdrawalRequests,
 	// Admin — wallet management
 	lockWallet,
 	unLockWallet,

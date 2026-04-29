@@ -106,7 +106,7 @@ const getOrderValidator = [
 				if (order.student.toString() !== req.user._id.toString()) {
 					throw new Error("ليس لديك صلاحية على هذا الطلب");
 				}
-			} else if (req.user.role === "instructor" || req.user.role === "admin") {
+			} else if (req.user.role === "instructor") {
 				if (order.instructor.toString() !== req.user._id.toString()) {
 					throw new Error("ليس لديك صلاحية على هذا الطلب");
 				}
@@ -135,7 +135,7 @@ const uploadDocsValidator = [
 			}
 
 			// Check if order is in correct status
-			if (order.status !== "in_progress") {
+			if (!["in_progress", "submitted"].includes(order.status)) {
 				throw new Error("لا يمكن إنهاء الطلب في حالته الحالية");
 			}
 
@@ -161,12 +161,12 @@ const uploadDocsValidator = [
 const getUploadVideoUrlValidator = [
 	param("orderId")
 		.notEmpty()
-		.withMessage("معرّف العرض مطلوب")
+		.withMessage("معرّف الطلب مطلوب")
 		.isMongoId()
-		.withMessage("معرّف العرض غير صحيح")
+		.withMessage("معرّف الطلب غير صحيح")
 		.custom(async (val, { req }) => {
 			const order = await Order.findById(val);
-			if (!order) throw new Error("هذا العرض غير موجود");
+			if (!order) throw new Error("هذا الطلب غير موجود");
 
 			if (order.instructor.toString() !== req.user._id.toString())
 				throw new Error("ليس لديك الصلاحية لرفع فيديو لهذا العرض");

@@ -48,6 +48,7 @@ const orderSchema = mongoose.Schema(
 			type: Number,
 			required: [true, "instructorPrice is required"],
 		},
+		platformProfit: Number,
 		deadline: {
 			type: Date,
 			required: [true, "deadline is required"],

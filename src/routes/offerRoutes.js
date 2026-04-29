@@ -14,6 +14,8 @@ const {
 	uploadFiles,
 	fileLocalUpdate,
 	setEstimatedTimeAndPrice,
+	createDirectOffer,
+	acceptOfferForDirectRequest,
 } = require("../controllers/offerController");
 const { protect, allowedTo } = require("../controllers/authController");
 const {
@@ -26,6 +28,8 @@ const {
 	deleteOfferValidator,
 	getUploadVideoUrlValidator,
 	setEstimatedTimeAndPriceValidator,
+	createDirectOfferValidator,
+	acceptDirectOfferValidator,
 } = require("../utils/validators/offerValidator");
 
 const router = express.Router();
@@ -46,6 +50,20 @@ router
 	.get(allowedTo("admin"), getAllOffers);
 
 router.get("/me", allowedTo("instructor"), getLoggedInstructorOffers);
+
+router.post(
+	"/direct",
+	allowedTo("instructor"),
+	createDirectOfferValidator,
+	createDirectOffer,
+);
+router.patch(
+	"/:id/acceptDirect",
+	allowedTo("student"),
+	acceptDirectOfferValidator,
+	acceptOfferForDirectRequest,
+);
+
 router.get(
 	"/request/:requestId",
 	allowedTo("student", "instructor"),

@@ -11,11 +11,20 @@ const createOfferValidator = [
 		.withMessage("معرّف الطلب مطلوب")
 		.isMongoId()
 		.withMessage("معرّف الطلب غير صحيح")
-		.custom(async (val) => {
+		.custom(async (val, { req }) => {
 			const request = await Request.findById(val);
 			if (!request) throw new Error("هذا الطلب غير موجود");
 			if (request.status !== "open")
 				throw new Error("لا يمكن إرسال عرض على طلب غير مفتوح");
+			const existingOffer = await Request.findOne({
+				request: val,
+				instructor: req.user._id,
+				isDeleted: false,
+			});
+
+			if (existingOffer) {
+				throw new Error("لقد قمت بإرسال عرض بالفعل على هذا الطلب");
+			}
 			return true;
 		}),
 
@@ -44,6 +53,63 @@ const createOfferValidator = [
 		.optional()
 		.isString()
 		.withMessage("invalid uploadId"),
+
+	validatorMiddleware,
+];
+
+// ── Create Direct Offer ──────────────────────────────────────────────────────────────
+const createDirectOfferValidator = [
+	body("request")
+		.notEmpty()
+		.withMessage("معرّف الطلب مطلوب")
+		.isMongoId()
+		.withMessage("معرّف الطلب غير صحيح")
+		.custom(async (val, { req }) => {
+			const request = await Request.findById(val).populate({
+				path: "student",
+				select: "country",
+			});
+			if (!request) throw new Error("هذا الطلب غير موجود");
+			if (request.status !== "open")
+				throw new Error("لا يمكن إرسال عرض على طلب غير مفتوح");
+			const existingOffer = await Request.findOne({
+				request: val,
+				instructor: req.user._id,
+				isDeleted: false,
+			});
+
+			if (existingOffer) {
+				throw new Error("لقد قمت بإرسال عرض بالفعل على هذا الطلب");
+			}
+			req.request = request;
+			return true;
+		}),
+
+	body("estimateTime")
+		.notEmpty()
+		.withMessage(" يجب تحديد الوقت التقديري عند إنشاء العرض")
+		.isNumeric(),
+
+	body("studentPrice")
+		.not()
+		.exists()
+		.withMessage("لا يمكنك تحديد السعر عند الإنشاء"),
+
+	body("instructorPrice")
+		.not()
+		.exists()
+		.withMessage("لا يمكنك تحديد السعر عند الإنشاء"),
+
+	body("status")
+		.not()
+		.exists()
+		.withMessage("لا يمكنك تحديد الحالة عند الإنشاء"),
+
+	// demo video
+	body("demoVideo.uploadUrl")
+		.not()
+		.exists()
+		.withMessage("لا يمكنك إنشاء فديو تجريبى هنا"),
 
 	validatorMiddleware,
 ];
@@ -132,8 +198,6 @@ const cancelOfferValidator = [
 			if (!["is-processing", "pending"].includes(offer.status))
 				throw new Error("لا يمكن إلغاء عرض في هذه الحالة");
 
-			console.log("validatin", offer);
-
 			req.offerDoc = offer;
 			return true;
 		}),
@@ -153,6 +217,7 @@ const acceptOfferValidator = [
 			const offer = await Offer.findById(val).populate([
 				{
 					path: "request",
+					select: "student",
 					populate: {
 						path: "student",
 						select: "email fullName",
@@ -163,6 +228,9 @@ const acceptOfferValidator = [
 					select: "email fullName",
 				},
 			]);
+			if (!offer) {
+				throw new Error("العرض بهذا id غير موجود");
+			}
 
 			if (!offer.request?.student?.email) {
 				throw new ApiError("Student email not found", 400);
@@ -170,10 +238,6 @@ const acceptOfferValidator = [
 
 			if (!offer.instructor?.email) {
 				throw new ApiError("Instructor email not found", 400);
-			}
-
-			if (!offer) {
-				throw new Error("العرض بهذا id غير موجود");
 			}
 
 			// Check offer status
@@ -190,9 +254,80 @@ const acceptOfferValidator = [
 				throw new Error("ليس لديك الصلاحية لقبول هذا العرض");
 			}
 
-			// Check request status
-			if (offer.request.status !== "open") {
-				throw new Error("لا يمكن قبول عرض على طلب غير مفتوح");
+			// Attach offer to request object to reuse in controller
+			req.offer = offer;
+
+			return true;
+		}),
+
+	body("allFiles")
+		.optional()
+		.isArray()
+		.withMessage("الملفات يجب أن تكون في صورة مصفوفة"),
+
+	body("allFiles.*")
+		.optional()
+		.isString()
+		.withMessage("كل ملف يجب أن يكون رابط نصي صحيح"),
+
+	validatorMiddleware,
+];
+
+const acceptDirectOfferValidator = [
+	param("id")
+		.notEmpty()
+		.withMessage("معرّف العرض مطلوب")
+		.isMongoId()
+		.withMessage("معرّف العرض غير صحيح")
+		.custom(async (val, { req }) => {
+			// Single DB call with populate
+			const offer = await Offer.findById(val).populate([
+				{
+					path: "request",
+					select: "student files",
+					populate: {
+						path: "student",
+						select: "email fullName",
+					},
+				},
+				{
+					path: "instructor",
+					select: "email fullName",
+				},
+			]);
+			if (!offer) {
+				throw new Error("العرض بهذا id غير موجود");
+			}
+
+			if (!offer.request?.student?.email) {
+				throw new ApiError("Student email not found", 400);
+			}
+
+			if (!offer.instructor?.email) {
+				throw new ApiError("Instructor email not found", 400);
+			}
+
+			// Check offer status
+			if (!["is-processing", "pending"].includes(offer.status)) {
+				throw new Error("لا يمكن قبول عرض غير معلّق");
+			}
+
+			if (!offer.request) {
+				throw new Error("الطلب المرتبط بهذا العرض غير موجود");
+			}
+
+			// Check request ownership
+			if (offer.request.student._id.toString() !== req.user._id.toString()) {
+				throw new Error("ليس لديك الصلاحية لقبول هذا العرض");
+			}
+
+			const acceptedOffer = await Offer.findOne({
+				request: offer.request._id,
+				status: "accepted",
+			});
+
+			if (acceptedOffer) {
+				throw new Error("تم قبول عرض بالفعل على هذا الطلب");
 			}
 
 			// Attach offer to request object to reuse in controller
@@ -262,6 +397,7 @@ const setEstimatedTimeAndPriceValidator = [
 			const offer = await Offer.findById(val).populate([
 				{
 					path: "request",
+					select: "student",
 					populate: {
 						path: "student",
 						select: "fullName email country wallet",
@@ -305,4 +441,6 @@ module.exports = {
 	deleteOfferValidator,
 	getUploadVideoUrlValidator,
 	setEstimatedTimeAndPriceValidator,
+	createDirectOfferValidator,
+	acceptDirectOfferValidator,
 };

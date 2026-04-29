@@ -311,8 +311,6 @@ const approveAssignmentSolution = asyncHandler(async (req, res, next) => {
 const requestAssignmentMeeting = asyncHandler(async (req, res, next) => {
 	const { order } = req;
 
-	console.log(order);
-
 	if (order.status !== "submitted") {
 		return next(
 			new ApiError(

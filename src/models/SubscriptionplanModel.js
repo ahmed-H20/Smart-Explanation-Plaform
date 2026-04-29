@@ -8,7 +8,7 @@ const subscriptionPlanSchema = new mongoose.Schema(
 			trim: true,
 			unique: true,
 		},
-		durationDays: {
+		numberOfHours: {
 			type: Number,
 			required: [true, "Duration in days is required"],
 			min: [1, "Duration must be at least 1 day"],

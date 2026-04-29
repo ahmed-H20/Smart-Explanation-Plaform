@@ -68,7 +68,6 @@ const getAllDocuments = (Model, name = "") =>
 		if (req.findObject) {
 			filter = req.findObject;
 		}
-		console.log("ffff", filter);
 
 		const documentsCount = await Model.countDocuments();
 		// Query build
