@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Simple Chat Test</title>
+		<style>
+			body {
+				font-family: Arial;
+				padding: 20px;
+			}
+			#messages {
+				border: 1px solid #ccc;
+				height: 200px;
+				overflow-y: auto;
+				padding: 10px;
+			}
+			input,
+			button {
+				margin-top: 10px;
+			}
+		</style>
+	</head>
+	<body>
+		<h2>Socket Chat Test</h2>
+
+		<label>Token:</label><br />
+		<input id="token" style="width: 400px" /><br />
+
+		<label>Chat ID:</label><br />
+		<input id="chatId" value="69f6c3d898a646927f3a609a" /><br />
+
+		<button id="connectBtn">Connect</button>
+
+		<div id="status"></div>
+
+		<hr />
+
+		<div id="messages"></div>
+
+		<input id="messageInput" placeholder="Type message..." />
+		<button id="sendBtn">Send</button>
+
+		<script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+
+		<script>
+			const SERVER_URL = "http://localhost:8000";
+
+			let socket = null;
+
+			const statusDiv = document.getElementById("status");
+			const messagesDiv = document.getElementById("messages");
+
+			function addMessage(text) {
+				const div = document.createElement("div");
+				div.innerText = text;
+				messagesDiv.appendChild(div);
+				messagesDiv.scrollTop = messagesDiv.scrollHeight;
+			}
+
+			document.getElementById("connectBtn").onclick = () => {
+				const token = document.getElementById("token").value;
+				const chatId = document.getElementById("chatId").value;
+
+				if (socket) {
+					socket.disconnect();
+				}
+
+				socket = io(SERVER_URL, {
+					auth: { token },
+				});
+
+				socket.on("connect", () => {
+					statusDiv.innerText = "✅ Connected: " + socket.id;
+
+					// join chat room
+					socket.emit("join_chat", chatId);
+				});
+
+				socket.on("connect_error", (err) => {
+					statusDiv.innerText = "❌ Error: " + err.message;
+				});
+
+				socket.on("new_message", (data) => {
+					addMessage(`👤 ${data.sender.type}: ${data.content}`);
+				});
+			};
+
+			document.getElementById("sendBtn").onclick = () => {
+				const msg = document.getElementById("messageInput").value;
+				const chatId = document.getElementById("chatId").value;
+
+				if (!socket) {
+					alert("Connect first!");
+					return;
+				}
+
+				socket.emit("send_message", {
+					chatId,
+					content: msg,
+				});
+
+				addMessage("🟢 Me: " + msg);
+
+				document.getElementById("messageInput").value = "";
+			};
+		</script>
+	</body>
+</html>

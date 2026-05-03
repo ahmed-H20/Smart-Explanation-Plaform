@@ -4,6 +4,7 @@ const asyncHandler = require("express-async-handler");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+const io = require("socket.io-client");
 const { generateToken } = require("../utils/generateToken");
 const ApiError = require("../utils/ApiError");
 const sendEmail = require("../utils/sendEmail");
@@ -70,6 +71,10 @@ const login = (Model) =>
 
 		// 4- Generate token
 		const token = generateToken({ id: user._id });
+
+		const socket = io(process.env.BASE_URL, {
+			auth: { token },
+		});
 
 		// 5- send res
 		res

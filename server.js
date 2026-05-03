@@ -1,7 +1,10 @@
 require("dotenv").config({ path: ".env" });
 const path = require("path");
 const express = require("express");
+const { Server } = require("socket.io");
+const http = require("http");
 const morgan = require("morgan");
+const socketInit = require("./src/socket");
 const dbConnecting = require("./src/config/database");
 const GlobalError = require("./src/middlewares/errorMiddleware");
 const ApiError = require("./src/utils/ApiError");
@@ -20,12 +23,21 @@ const AssignmentRoutes = require("./src/routes/assignmentRoutes");
 const SubscriptionPlanRoutes = require("./src/routes/subscriptionplanRoutes");
 const Subscription = require("./src/routes/subscriptionRoutes");
 const HourlyPrices = require("./src/routes/CountryHourlyPricingRoutes");
+const chatRoutes = require("./src/routes/chatRoutes");
 const { connectRedis } = require("./src/config/redis");
 const expireSubscriptions = require("./src/crons/Expiresubscriptions");
 const responseFormatter = require("./src/middlewares/responseFormatter");
 
 // Create app
 const app = express();
+const server = http.createServer(app);
+
+// Real-time with socket.io
+const io = new Server(server, {
+	cors: {
+		origin: "*",
+	},
+});
 
 // Connect db
 dbConnecting();
@@ -55,6 +67,7 @@ app.use("/api/v1/assignments", AssignmentRoutes);
 app.use("/api/v1/subscriptionPlan", SubscriptionPlanRoutes);
 app.use("/api/v1/subscriptions", Subscription);
 app.use("/api/v1/hourlyPrices", HourlyPrices);
+app.use("/api/v1/chats", chatRoutes);
 
 // Not found route
 app.use((req, res, next) => {
@@ -66,8 +79,13 @@ app.use((req, res, next) => {
 app.use(GlobalError);
 
 // create server listener
+app.use((req, res, next) => {
+	req.io = io;
+	next();
+});
+socketInit(io); // Initialize socket connections and events
 const port = process.env.PORT || 8000;
-const server = app.listen(port, () => {
+server.listen(port, () => {
 	console.log(`server running on ${port} 🚀 `);
 });
 
