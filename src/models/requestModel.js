@@ -1,3 +1,4 @@
+/* eslint-disable prefer-arrow-callback */
 const mongoose = require("mongoose");
 
 const requestSchema = mongoose.Schema(
@@ -9,7 +10,7 @@ const requestSchema = mongoose.Schema(
 		},
 		type: {
 			type: String,
-			enum: ["video", "assignment"],
+			enum: ["video", "assignment", "live"],
 			default: "video",
 		},
 		creationType: {

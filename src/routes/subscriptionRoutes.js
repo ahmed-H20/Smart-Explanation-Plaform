@@ -22,7 +22,11 @@ router.post("/", allowedTo("student"), subscribe);
 router.get("/me", allowedTo("student"), getMySubscriptionsHandler);
 
 // PATCH /api/v1/subscriptions/:id/cancel
-router.patch("/:id/cancel", allowedTo("student"), cancelSubscriptionHandler);
+router.patch(
+	"/:id/cancel",
+	allowedTo("student", "admin"),
+	cancelSubscriptionHandler,
+);
 
 // GET /api/v1/subscriptions/:id
 router.get("/:id", allowedTo("admin", "student"), getSubscriptionHandler);

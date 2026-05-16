@@ -18,6 +18,11 @@ const createOrderValidator = [
 			// Fetch offer with related request
 			const offer = await Offer.findById(offerId).populate("request");
 
+			//offer finish and have prices
+			if (!offer.priceUSD || !offer.estimatedTime) {
+				throw new Error("العرض غير جاهز بعد لإنشاء طلب");
+			}
+
 			// Check if offer exists
 			if (!offer) {
 				throw new Error("العرض غير موجود");
@@ -41,6 +46,73 @@ const createOrderValidator = [
 
 			return true;
 		}),
+
+	validatorMiddleware,
+];
+
+const createLiveOrderValidator = [
+	check("offer")
+		// Ensure offer field exists
+		.notEmpty()
+		.withMessage("يجب إرسال معرف العرض")
+
+		// Validate MongoDB ObjectId format
+		.isMongoId()
+		.withMessage("معرف العرض غير صالح")
+
+		// Custom validation logic
+		.custom(async (offerId, { req }) => {
+			// Fetch offer with related request
+			const offer = await Offer.findById(offerId).populate("request");
+
+			//offer finish and have prices
+			if (!offer.priceUSD || !offer.estimatedTime) {
+				throw new Error("العرض غير جاهز بعد لإنشاء طلب");
+			}
+
+			// Check if offer exists
+			if (!offer) {
+				throw new Error("العرض غير موجود");
+			}
+
+			// Ensure offer is accepted before creating order
+			if (offer.status !== "accepted") {
+				throw new Error("لا يمكن إنشاء طلب إلا بعد قبول العرض");
+			}
+
+			// Ensure logged-in user is the student who owns the request
+			if (offer.request.student.toString() !== req.user._id.toString()) {
+				throw new Error("غير مسموح لك بإنشاء طلب لهذا العرض");
+			}
+
+			// Prevent duplicate orders for same offer
+			const existingOrder = await Order.findOne({ offer: offerId });
+			if (existingOrder) {
+				throw new Error("تم إنشاء طلب مسبقاً لهذا العرض");
+			}
+
+			return true;
+		}),
+
+	check("timeOfNextSession")
+		.notEmpty()
+		.withMessage("يجب إرسال وقت الجلسة القادمة")
+		.isISO8601()
+		.withMessage("صيغة وقت الجلسة القادمة غير صحيحة")
+		.custom((value) => {
+			const sessionTime = new Date(value);
+			const now = new Date();
+			if (sessionTime <= now) {
+				throw new Error("وقت الجلسة القادمة يجب أن يكون في المستقبل");
+			}
+			return true;
+		}),
+
+	check("numberOfTotalSessions")
+		.notEmpty()
+		.withMessage("يجب إرسال عدد الجلسات")
+		.isNumeric()
+		.withMessage("عدد الجلسات يجب أن يكون رقماً"),
 
 	validatorMiddleware,
 ];
@@ -106,7 +178,7 @@ const getOrderValidator = [
 				if (order.student.toString() !== req.user._id.toString()) {
 					throw new Error("ليس لديك صلاحية على هذا الطلب");
 				}
-			} else if (req.user.role === "instructor" || req.user.role === "admin") {
+			} else if (req.user.role === "instructor") {
 				if (order.instructor.toString() !== req.user._id.toString()) {
 					throw new Error("ليس لديك صلاحية على هذا الطلب");
 				}
@@ -161,12 +233,12 @@ const uploadDocsValidator = [
 const getUploadVideoUrlValidator = [
 	param("orderId")
 		.notEmpty()
-		.withMessage("معرّف العرض مطلوب")
+		.withMessage("معرّف الطلب مطلوب")
 		.isMongoId()
-		.withMessage("معرّف العرض غير صحيح")
+		.withMessage("معرّف الطلب غير صحيح")
 		.custom(async (val, { req }) => {
 			const order = await Order.findById(val);
-			if (!order) throw new Error("هذا العرض غير موجود");
+			if (!order) throw new Error("هذا الطلب غير موجود");
 
 			if (order.instructor.toString() !== req.user._id.toString())
 				throw new Error("ليس لديك الصلاحية لرفع فيديو لهذا العرض");
@@ -185,4 +257,5 @@ module.exports = {
 	getOrderValidator,
 	uploadDocsValidator,
 	getUploadVideoUrlValidator,
+	createLiveOrderValidator,
 };

@@ -17,6 +17,11 @@ const orderSchema = mongoose.Schema(
 			ref: "Offer",
 			required: [true, "Offer is required"],
 		},
+		type: {
+			type: String,
+			enum: ["video", "assignment", "live"],
+			default: "video",
+		},
 		status: {
 			type: String,
 			enum: [
@@ -38,24 +43,22 @@ const orderSchema = mongoose.Schema(
 			enum: ["held", "released", "refunded"],
 			default: "held",
 		},
+		paymentMethod: {
+			type: String,
+			enum: ["subscription", "wallet"],
+		},
 		paidBySubscription: Boolean,
 		subscription: String,
-		studentPrice: {
+		subscriptionHoursAmount: Number,
+		studentPriceUSD: {
 			type: Number,
 			required: [true, "studentPrice is required"],
 		},
-		instructorPrice: {
+		instructorPriceUSD: {
 			type: Number,
 			required: [true, "instructorPrice is required"],
 		},
-		studentCurrency: {
-			type: String,
-			required: [true, "student currency is required"],
-		},
-		instructorCurrency: {
-			type: String,
-			required: [true, "instructor currency is required"],
-		},
+		platformProfit: Number,
 		deadline: {
 			type: Date,
 			required: [true, "deadline is required"],
@@ -85,6 +88,14 @@ const orderSchema = mongoose.Schema(
 		documents: [String],
 		quizzes: [String],
 		paidAt: Date,
+		chatId: {
+			type: mongoose.Schema.ObjectId,
+			ref: "Chat",
+		},
+		liveId: {
+			type: mongoose.Schema.ObjectId,
+			ref: "Live",
+		},
 		startedAt: Date,
 		completedAt: Date,
 		isDeleted: {
@@ -117,5 +128,12 @@ const addFileURL = (doc) => {
 };
 orderSchema.post("init", addFileURL);
 orderSchema.post("save", addFileURL);
+
+// populate chatId automatically
+orderSchema.pre(/^find/, function () {
+	this.populate({
+		path: "chatId",
+	});
+});
 
 module.exports = mongoose.model("Order", orderSchema);

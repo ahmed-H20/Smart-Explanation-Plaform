@@ -21,6 +21,7 @@ const {
 	lockWallet, //DONE
 	unLockWallet,
 	chargeWalletManually,
+	getAllWithdrawalRequests,
 } = require("../controllers/walletController");
 
 const router = express.Router();
@@ -40,7 +41,8 @@ router
 		"/me/transactions",
 		allowedTo("student", "instructor"),
 		getLoggedUserTransactions,
-	);
+	)
+	.get("/withdrawalRequests", allowedTo("admin"), getAllWithdrawalRequests);
 
 router
 	// ── Instructor — withdraw ────────────────
@@ -48,10 +50,14 @@ router
 
 router
 	// ── Admin — withdraw management ──────────
-	.patch("/withdraw/:id/approve", allowedTo("admin"), approveWithdraw)
-	.patch("/withdraw/:id/reject", allowedTo("admin"), rejectWithdraw)
 	.patch(
-		"/withdraw/:id/receipt",
+		"/withdraw/:transactionID/approve",
+		allowedTo("admin"),
+		approveWithdraw,
+	)
+	.patch("/withdraw/:transactionID/reject", allowedTo("admin"), rejectWithdraw)
+	.patch(
+		"/withdraw/:transactionID/receipt",
 		allowedTo("admin"),
 		uploadReceiptFile,
 		receiptLocalUpdate,
@@ -60,8 +66,8 @@ router
 
 router
 	// ── Admin — wallet management ────────────
-	.put("/lock/:id", allowedTo("admin"), lockWallet)
-	.put("/unlock/:id", allowedTo("admin"), unLockWallet)
-	.put("/manualCharge/:id", allowedTo("admin"), chargeWalletManually);
+	.put("/lock", allowedTo("admin"), lockWallet)
+	.put("/unlock", allowedTo("admin"), unLockWallet)
+	.put("/manualCharge", allowedTo("admin"), chargeWalletManually);
 
 module.exports = router;

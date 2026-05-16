@@ -68,6 +68,7 @@ const getAllDocuments = (Model, name = "") =>
 		if (req.findObject) {
 			filter = req.findObject;
 		}
+
 		const documentsCount = await Model.countDocuments();
 		// Query build
 		const productsData = new ApiFeatures(Model.find(filter), req.query)

@@ -1,13 +1,16 @@
 const asyncHandler = require("express-async-handler");
 const axios = require("axios");
 const mongoose = require("mongoose");
-
+const crypto = require("crypto");
 const { getAllDocuments, getDocument } = require("./handlerFactory");
 const Model = require("../models/orderModel");
 const Transaction = require("../models/transactionsModel");
 const Wallet = require("../models/walletModel");
 const Subscription = require("../models/subscriptionModel");
 const Offer = require("../models/offerModel");
+const Chat = require("../models/chatModel");
+const Live = require("../models/liveModel");
+const Session = require("../models/liveDetailsModel");
 const ApiError = require("../utils/ApiError");
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
 const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
@@ -16,6 +19,9 @@ const {
 	instructorCreateOrder,
 	studentCreateOrder,
 } = require("../utils/emailTemplates");
+const { sendNotification } = require("../utils/sendNotification");
+
+const uuid = crypto.randomUUID();
 
 // *********** CREATE AND GET ORDERS **************
 
@@ -27,7 +33,9 @@ const createOrder = asyncHandler(async (req, res, next) => {
 	session.startTransaction();
 
 	try {
-		// 1️⃣ Get accepted offer — populate request (student + major)
+		const orderId = new mongoose.Types.ObjectId();
+
+		// 1️⃣ Get Offer
 		const acceptedOffer = await Offer.findById(req.body.offer)
 			.populate({
 				path: "request",
@@ -40,140 +48,173 @@ const createOrder = asyncHandler(async (req, res, next) => {
 			throw new ApiError("Offer not found", 404);
 		}
 
-		const { student } = acceptedOffer.request;
-		const { major } = acceptedOffer.request;
+		const { student, major } = acceptedOffer.request;
 
-		if (!major) {
-			throw new ApiError(
-				"Request has no major attached — cannot process order",
-				400,
-			);
-		}
-
-		// 2️⃣ Subscription check
-		//
-		// Three possible states:
-		//
-		//  A) Student has NO subscription for this major at all
-		//     (never subscribed, or only has subscriptions for other majors)
-		//     → ALLOWED: pay directly from wallet, no subscription needed
-		//
-		//  B) Student HAS a subscription for this major but it is inactive
-		//     (status = "cancelled" | "expired", OR endDate has passed)
-		//     → BLOCKED: must renew subscription before placing an order
-		//
-		//  C) Student HAS an active, non-expired subscription for this major
-		//     → ALLOWED: proceed normally, wallet payment still applies
-		//
-		// This design lets unsubscribed students use the platform freely,
-		// but once a student has ever subscribed to a major and that subscription
-		// lapses, they must renew — they cannot fall back to the "no subscription" path.
-
-		// Look for ANY subscription (any status) for this student + major
-		const anySubscription = await Subscription.findOne({
+		// 2️⃣ Get subscription for this student + major
+		const subscription = await Subscription.findOne({
 			studentId: student._id,
-			majorId: major._id,
-		}).session(session);
+		})
+			.populate("planId")
+			.session(session);
 
-		if (anySubscription) {
-			// Student has/had a subscription for this major — enforce its status
-			const isActive =
-				anySubscription.status === "active" &&
-				anySubscription.endDate > new Date(); // runtime expiry guard
+		let paymentMethod = null;
+		let studentWallet = null;
+		console.log(subscription);
 
-			if (!isActive) {
-				// Determine a clear reason for the block
-				const reason =
-					anySubscription.endDate <= new Date()
-						? "Your subscription for this major has expired. Please renew to continue placing orders."
-						: "Your subscription for this major is no longer active. Please subscribe again to place orders.";
+		// ================================
+		// 🟢 PATH 1: Subscription
+		// ================================
+		if (
+			subscription &&
+			subscription.status === "active" &&
+			subscription.numberOfHours > 0
+		) {
+			paymentMethod = "subscription";
 
-				throw new ApiError(reason, 403);
+			if (subscription.numberOfHours < acceptedOffer.estimatedTime) {
+				throw new ApiError(
+					`Your subscription does not have enough hours. Remaining hours: ${subscription.numberOfHours}`,
+					400,
+				);
 			}
-			// else: active subscription — fall through and allow the order
-		}
-		// else: no subscription at all for this major — allow direct wallet payment
 
-		// 3️⃣ Get and validate wallet
-		const studentWallet = await Wallet.findOne({
-			userId: student._id,
-			userType: "Student",
-		}).session(session);
+			// 🔥 use hours
+			subscription.numberOfHours -= acceptedOffer.estimatedTime;
 
-		if (!studentWallet) {
-			throw new ApiError("There is no wallet for this user", 404);
+			if (subscription.numberOfHours < 0) {
+				throw new ApiError("No remaining hours in subscription", 400);
+			}
+
+			await subscription.save({ session });
 		}
 
-		if (studentWallet.isLocked) {
-			throw new ApiError("Your wallet is locked. Please contact support.", 403);
+		// ================================
+		// 🔵 PATH 2: Wallet
+		// ================================
+		else {
+			paymentMethod = "wallet";
+
+			studentWallet = await Wallet.findOne({
+				userId: student._id,
+				userType: "Student",
+			}).session(session);
+
+			if (!studentWallet) {
+				throw new ApiError("No wallet found", 404);
+			}
+
+			if (studentWallet.isLocked) {
+				throw new ApiError("Wallet is locked", 403);
+			}
+
+			if (studentWallet.balanceUSD < acceptedOffer.priceUSD) {
+				throw new ApiError("Insufficient balance", 400);
+			}
+
+			// خصم الرصيد
+			studentWallet.balanceUSD -= acceptedOffer.priceUSD;
+			studentWallet.freezedBalanceUSD += acceptedOffer.priceUSD;
+
+			await studentWallet.save({ session });
 		}
 
-		if (studentWallet.balance < acceptedOffer.studentPrice) {
-			throw new ApiError(
-				"You don't have enough balance to create this order",
-				400,
-			);
-		}
+		// ================================
+		// 🟣 Create Chat
+		// ================================
+		const chat = await Chat.findOneAndUpdate(
+			{
+				"participants.instructor": acceptedOffer.instructor._id,
+				"participants.student": student._id,
+				referenceId: orderId,
+				referenceType: "Order",
+			},
+			{
+				$setOnInsert: {
+					type: "order",
+					participants: {
+						instructor: acceptedOffer.instructor._id,
+						student: student._id,
+					},
+					referenceId: orderId,
+					referenceType: "Order",
+				},
+			},
+			{ new: true, upsert: true, session },
+		);
 
-		// 4️⃣ Create Order
-		// Store subscription ref only when one was involved (for audit trail)
-		const orderPayload = {
-			student: req.user._id,
-			instructor: acceptedOffer.instructor._id,
-			studentPrice: acceptedOffer.studentPrice,
-			instructorPrice: acceptedOffer.instructorPrice,
-			deadline: acceptedOffer.request.deadline,
-			instructorCurrency: acceptedOffer.instructorCurrency,
-			studentCurrency: acceptedOffer.studentCurrency,
-			paidAt: Date.now(),
-			startedAt: Date.now(),
-			offer: acceptedOffer._id,
-		};
-
-		const order = await Model.create([orderPayload], { session });
-		const createdOrder = order[0];
-
-		// 5️⃣ Create debit Transaction
-		await Transaction.create(
+		// ================================
+		// 🟡 Create Order
+		// ================================
+		const order = await Model.create(
 			[
 				{
-					wallet: studentWallet._id,
-					type: "debit",
-					status: "completed",
-					amount: createdOrder.studentPrice,
-					reason: "order_create",
-					referenceModel: "Order",
-					referenceId: createdOrder._id,
-					balanceBefore: studentWallet.balance,
-					balanceAfter: studentWallet.balance - createdOrder.studentPrice,
+					_id: orderId,
+					student: student._id,
+					instructor: acceptedOffer.instructor._id,
+					studentPriceUSD: acceptedOffer.priceUSD,
+					instructorPriceUSD: acceptedOffer.instructorEarningUSD,
+					chatId: chat._id,
+					deadline: acceptedOffer.request.deadline,
+					offer: acceptedOffer._id,
+					type: acceptedOffer.type,
+					paymentMethod, // 🔥 مهم
+					paidAt: Date.now(),
+					startedAt: Date.now(),
 				},
 			],
 			{ session },
 		);
 
-		// 6️⃣ Deduct balance and freeze the order amount
-		studentWallet.balance -= createdOrder.studentPrice;
-		studentWallet.freezedBalance += createdOrder.studentPrice;
-		await studentWallet.save({ session });
+		const createdOrder = order[0];
+
+		// ================================
+		// 🟠 Transaction (only wallet)
+		// ================================
+		if (paymentMethod === "wallet") {
+			await Transaction.create(
+				[
+					{
+						wallet: studentWallet._id,
+						type: "debit",
+						status: "completed",
+						amountUSD: createdOrder.studentPriceUSD,
+						balanceBeforeUSD:
+							studentWallet.balanceUSD + createdOrder.studentPriceUSD,
+						balanceAfterUSD: studentWallet.balanceUSD,
+						reason: "order_create",
+						referenceModel: "Order",
+						referenceId: createdOrder._id,
+					},
+				],
+				{ session },
+			);
+		}
 
 		// ✅ Commit
 		await session.commitTransaction();
 		session.endSession();
 
-		// 📧 Send emails AFTER commit (must never block or roll back the transaction)
-		await sendEmail({
-			to: student.email,
-			subject: "Order Created Successfully 🎉",
-			html: studentCreateOrder(createdOrder, student.fullName),
+		// ================================
+		// 🔔 Notifications
+		// ================================
+		await sendNotification({
+			io: req.io,
+			receivers: [student._id],
+			userType: "Student",
+			type: "order_created",
+			title: "Order Created 🎉",
+			body: `Your order has been created`,
+			data: { orderId: createdOrder._id },
 		});
 
-		await sendEmail({
-			to: acceptedOffer.instructor.email,
-			subject: "New Order Assigned 📚",
-			html: instructorCreateOrder(
-				createdOrder,
-				acceptedOffer.instructor.fullName,
-			),
+		await sendNotification({
+			io: req.io,
+			receivers: [acceptedOffer.instructor._id],
+			userType: "Instructor",
+			type: "order_created",
+			title: "New Order Assigned 📚",
+			body: `You got a new order`,
+			data: { orderId: createdOrder._id },
 		});
 
 		res.status(200).json({
@@ -186,6 +227,227 @@ const createOrder = asyncHandler(async (req, res, next) => {
 		return next(err);
 	}
 });
+
+// const createOrder = asyncHandler(async (req, res, next) => {
+// 	const session = await mongoose.startSession();
+// 	session.startTransaction();
+
+// 	try {
+// 		const orderId = new mongoose.Types.ObjectId(); // Generate order ID upfront for chat reference
+
+// 		// 1️⃣ Get accepted offer — populate request (student + major)
+// 		const acceptedOffer = await Offer.findById(req.body.offer)
+// 			.populate({
+// 				path: "request",
+// 				populate: [{ path: "student" }, { path: "major" }],
+// 			})
+// 			.populate("instructor")
+// 			.session(session);
+
+// 		if (!acceptedOffer) {
+// 			throw new ApiError("Offer not found", 404);
+// 		}
+
+// 		const { student, major } = acceptedOffer.request;
+
+// 		if (!major) {
+// 			throw new ApiError(
+// 				"Request has no major attached — cannot process order",
+// 				400,
+// 			);
+// 		}
+
+// 		// 2️⃣ Subscription check
+// 		//
+// 		// Three possible states:
+// 		//
+// 		//  A) Student has NO subscription for this major at all
+// 		//     (never subscribed, or only has subscriptions for other majors)
+// 		//     → ALLOWED: pay directly from wallet, no subscription needed
+// 		//
+// 		//  B) Student HAS a subscription for this major but it is inactive
+// 		//     (status = "cancelled" | "expired", OR endDate has passed)
+// 		//     → BLOCKED: must renew subscription before placing an order
+// 		//
+// 		//  C) Student HAS an active, non-expired subscription for this major
+// 		//     → ALLOWED: proceed normally, wallet payment still applies
+// 		//
+// 		// This design lets unsubscribed students use the platform freely,
+// 		// but once a student has ever subscribed to a major and that subscription
+// 		// lapses, they must renew — they cannot fall back to the "no subscription" path.
+
+// 		// Look for ANY subscription (any status) for this student + major
+// 		const anySubscription = await Subscription.findOne({
+// 			studentId: student._id,
+// 		})
+// 			.populate("planId")
+// 			.session(session);
+
+// 		let isSubscriptionActive = false; // Default to no active subscription
+// 		let subscriptionHoursAmount = 0;
+// 		let studentWallet = null;
+
+// 		if (anySubscription) {
+// 			// TODO: store info of supscription paid
+// 			const isActive =
+// 				anySubscription.status === "active" &&
+// 				anySubscription.planId.numberOfHours > 0;
+// 			isSubscriptionActive = isActive;
+// 			subscriptionHoursAmount = anySubscription.planId.numberOfHours;
+// 		}
+
+// 		// if (anySubscription) {
+// 		// 	// Student has/had a subscription for this major — enforce its status
+// 		// 	const isActive =
+// 		// 		anySubscription.status === "active" &&
+// 		// 		anySubscription.endDate > new Date(); // runtime expiry guard
+
+// 		// 	if (!isActive) {
+// 		// 		// Determine a clear reason for the block
+// 		// 		const reason =
+// 		// 			anySubscription.endDate <= new Date()
+// 		// 				? "Your subscription for this major has expired. Please renew to continue placing orders."
+// 		// 				: "Your subscription for this major is no longer active. Please subscribe again to place orders.";
+
+// 		// 		throw new ApiError(reason, 403);
+// 		// 	}
+// 		// 	// else: active subscription — fall through and allow the order
+// 		// }
+// 		// else: no subscription at all for this major — allow direct wallet payment
+
+// 		// 3️⃣ Get and validate wallet
+
+// 		// create chat between student and instructor for this order
+
+// 		if (!anySubscription) {
+// 			studentWallet = await Wallet.findOne({
+// 				userId: student._id,
+// 				userType: "Student",
+// 			}).session(session);
+
+// 			if (!studentWallet) {
+// 				throw new ApiError("There is no wallet for this user", 404);
+// 			}
+
+// 			if (studentWallet.isLocked) {
+// 				throw new ApiError(
+// 					"Your wallet is locked. Please contact support.",
+// 					403,
+// 				);
+// 			}
+
+// 			if (studentWallet.balanceUSD < acceptedOffer.priceUSD) {
+// 				throw new ApiError(
+// 					"You don't have enough balance to create this order",
+// 					400,
+// 				);
+// 			}
+// 		}
+
+// 		const newChat = {
+// 			referenceId: orderId,
+// 			referenceType: "Order",
+// 			type: "order",
+// 			participants: {
+// 				instructor: acceptedOffer.instructor._id,
+// 				student: student._id,
+// 			},
+// 		};
+// 		const createdChat = await Chat.create([newChat], { session });
+
+// 		// 4️⃣ Create Order
+// 		// Store subscription ref only when one was involved (for audit trail)
+// 		const orderPayload = {
+// 			_id: orderId,
+// 			student: req.user._id,
+// 			instructor: acceptedOffer.instructor._id,
+// 			studentPriceUSD: acceptedOffer.priceUSD,
+// 			instructorPriceUSD: acceptedOffer.instructorEarningUSD,
+// 			chatId: createdChat[0]._id,
+// 			deadline: acceptedOffer.request.deadline,
+// 			paidAt: Date.now(),
+// 			startedAt: Date.now(),
+// 			offer: acceptedOffer._id,
+// 		};
+
+// 		const order = await Model.create([orderPayload], { session });
+// 		const createdOrder = order[0];
+
+// 		// 5️⃣ Create debit Transaction
+// 		await Transaction.create(
+// 			[
+// 				{
+// 					wallet: studentWallet._id,
+// 					type: "debit",
+// 					status: "completed",
+// 					amountUSD: createdOrder.studentPriceUSD,
+// 					reason: "order_create",
+// 					referenceModel: "Order",
+// 					referenceId: createdOrder._id,
+// 					balanceBeforeUSD: studentWallet.balanceUSD,
+// 					balanceAfterUSD:
+// 						studentWallet.balanceUSD - createdOrder.studentPriceUSD,
+// 				},
+// 			],
+// 			{ session },
+// 		);
+
+// 		// 6️⃣ Deduct balance and freeze the order amount
+// 		studentWallet.balanceUSD -= createdOrder.studentPriceUSD;
+// 		studentWallet.freezedBalanceUSD += createdOrder.studentPriceUSD;
+// 		await studentWallet.save({ session });
+
+// 		// ✅ Commit
+// 		await session.commitTransaction();
+// 		session.endSession();
+
+// 		// 7️⃣ Notifications
+// 		await sendNotification({
+// 			io: req.io,
+// 			receivers: [student._id],
+// 			userType: "Student",
+// 			type: "order_created",
+// 			title: "Order Created 🎉",
+// 			body: `Your order for the request "${acceptedOffer.request.title}" has been created successfully.`,
+// 			data: { orderId: createdOrder._id },
+// 		});
+
+// 		await sendNotification({
+// 			io: req.io,
+// 			receivers: [acceptedOffer.instructor._id],
+// 			userType: "Instructor",
+// 			type: "order_created",
+// 			title: "New Order Assigned 📚",
+// 			body: `You have been assigned a new order for the request "${acceptedOffer.request.title}".`,
+// 			data: { orderId: createdOrder._id },
+// 		});
+
+// 		// 📧 Send emails AFTER commit (must never block or roll back the transaction)
+// 		await sendEmail({
+// 			to: student.email,
+// 			subject: "Order Created Successfully 🎉",
+// 			html: studentCreateOrder(createdOrder, student.fullName),
+// 		});
+
+// 		await sendEmail({
+// 			to: acceptedOffer.instructor.email,
+// 			subject: "New Order Assigned 📚",
+// 			html: instructorCreateOrder(
+// 				createdOrder,
+// 				acceptedOffer.instructor.fullName,
+// 			),
+// 		});
+
+// 		res.status(200).json({
+// 			message: "Order created successfully",
+// 			data: createdOrder,
+// 		});
+// 	} catch (err) {
+// 		await session.abortTransaction();
+// 		session.endSession();
+// 		return next(err);
+// 	}
+// });
 
 // @desc get all orders
 // @route Get api/v1/orders
@@ -222,7 +484,6 @@ const getLoggedUserOrders = asyncHandler(async (req, res, next) => {
 		data: orders,
 	});
 });
-
 // *********** UPLOAD DOCS **************
 const uploadFiles = uploadMixOfFiles([
 	{
@@ -340,7 +601,6 @@ const getUploadVideoUrl = asyncHandler(async (req, res, next) => {
 const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 	const event = req.body;
 
-	console.log("MUX EVENT:", event.type);
 
 	// 1️⃣ get orderId
 	const orderId = event.data?.passthrough;
@@ -401,7 +661,6 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 
 	const result = await Model.updateOne(filter, updateQuery);
 
-	console.log("Update result:", result);
 
 	return res.status(200).json({ message: "Webhook processed" });
 });
@@ -486,8 +745,6 @@ const getLoggedUserVideos = asyncHandler(async (req, res, next) => {
 		return next(new ApiError("غير مصرح لك", 403));
 	}
 
-	console.log(order);
-
 	//2- process videos
 	let videos = [];
 	if (order.videos && order.videos.length > 0) {
@@ -558,9 +815,9 @@ const finishAndSubmitOrder = asyncHandler(async (req, res, next) => {
 
 		// 5️⃣ release money (credit instructor)
 		const instructorBalanceBefore = instructorWallet.balanceUSD;
-		instructorWallet.balance += order.instructorPrice;
+		instructorWallet.balanceUSD += order.instructorPriceUSD;
 		await instructorWallet.save({ session });
-		studentWallet.freezedBalance -= order.studentPrice;
+		studentWallet.freezedBalanceUSD -= order.studentPriceUSD;
 		await studentWallet.save({ session });
 
 		// 6️⃣ create transaction for instructor
@@ -570,12 +827,12 @@ const finishAndSubmitOrder = asyncHandler(async (req, res, next) => {
 					wallet: instructorWallet._id,
 					type: "credit",
 					status: "completed",
-					amount: order.instructorPrice,
+					amountUSD: order.instructorPriceUSD,
 					reason: "order_completed",
 					referenceId: order._id,
 					referenceModel: "Order",
-					balanceBefore: instructorBalanceBefore,
-					balanceAfter: instructorWallet.balance,
+					balanceBeforeUSD: instructorBalanceBefore,
+					balanceAfterUSD: instructorWallet.balanceUSD,
 				},
 			],
 			{ session },
@@ -585,11 +842,23 @@ const finishAndSubmitOrder = asyncHandler(async (req, res, next) => {
 		order.status = "completed";
 		order.paymentStatus = "released";
 		order.completedAt = Date.now();
+		order.platformProfit = order.studentPriceUSD - order.instructorPriceUSD;
 
 		await order.save({ session });
 
 		await session.commitTransaction();
 		session.endSession();
+
+		// 8️⃣ Notifications
+		await sendNotification({
+			io: req.io,
+			receivers: [order.student],
+			userType: "Student",
+			type: "order_completed",
+			title: "Order Completed 🎉",
+			body: `Your order for the request "${order.request.title}" has been completed successfully.`,
+			data: { orderId: order._id },
+		});
 
 		res.status(200).json({
 			message: "Order completed and payment released successfully",
@@ -676,6 +945,17 @@ const cancelOrder = asyncHandler(async (req, res, next) => {
 		await session.commitTransaction();
 		session.endSession();
 
+		// 8️⃣ Notifications
+		await sendNotification({
+			io: req.io,
+			receivers: [order.instructor],
+			userType: "Instructor",
+			type: "order_cancelled",
+			title: "Order Cancelled ❌",
+			body: `The student has cancelled the order for the request "${order.request.title}".`,
+			data: { orderId: order._id },
+		});
+
 		res.status(200).json({
 			message: "تم إلغاء الطلب واسترجاع المبلغ بنجاح",
 			data: order,
@@ -701,9 +981,272 @@ const deleteOrder = asyncHandler(async (req, res, next) => {
 	order.isDeleted = true;
 	await order.save();
 
+	// notify both student and instructor about deletion
+	await sendNotification({
+		io: req.io,
+		receivers: [order.student],
+		userType: "Student",
+		type: "order_cancelled",
+		title: "Order Deleted ❌",
+		body: `Your order for the request "${order.request.title}" has been deleted by the administration.`,
+		data: { orderId: order._id },
+	});
+
+	await sendNotification({
+		io: req.io,
+		receivers: [order.instructor],
+		userType: "Instructor",
+		type: "order_cancelled",
+		title: "Order Deleted ❌",
+		body: `The order for the request "${order.request.title}" has been deleted by the administration.`,
+		data: { orderId: order._id },
+	});
+
 	res.status(200).json({
 		message: "تم حذف الطلب بنجاح",
 	});
+});
+
+// @desc create live order
+// @route POST api/v1/orders/live
+// @access privet student //DONE
+const createLiveOrder = asyncHandler(async (req, res, next) => {
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		const orderId = new mongoose.Types.ObjectId();
+
+		// 1️⃣ Get Offer
+		const acceptedOffer = await Offer.findById(req.body.offer)
+			.populate({
+				path: "request",
+				populate: [{ path: "student" }, { path: "major" }],
+			})
+			.populate("instructor")
+			.session(session);
+
+		if (!acceptedOffer) {
+			throw new ApiError("Offer not found", 404);
+		}
+
+		const { student, major } = acceptedOffer.request;
+
+		// 2️⃣ Get subscription for this student + major
+		const subscription = await Subscription.findOne({
+			studentId: student._id,
+		})
+			.populate("planId")
+			.session(session);
+
+		let paymentMethod = null;
+		let studentWallet = null;
+
+		// ================================
+		// 🟢 PATH 1: Subscription
+		// ================================
+		if (
+			subscription &&
+			subscription.status === "active" &&
+			subscription.numberOfHours > 0
+		) {
+			paymentMethod = "subscription";
+
+			if (subscription.numberOfHours < acceptedOffer.estimatedTime) {
+				throw new ApiError(
+					`Your subscription does not have enough hours. Remaining hours: ${subscription.numberOfHours}`,
+					400,
+				);
+			}
+
+			// 🔥 use hours
+			subscription.numberOfHours -= acceptedOffer.estimatedTime;
+
+			if (subscription.numberOfHours < 0) {
+				throw new ApiError("No remaining hours in subscription", 400);
+			}
+
+			await subscription.save({ session });
+		}
+
+		// ================================
+		// 🔵 PATH 2: Wallet
+		// ================================
+		else {
+			paymentMethod = "wallet";
+
+			studentWallet = await Wallet.findOne({
+				userId: student._id,
+				userType: "Student",
+			}).session(session);
+
+			if (!studentWallet) {
+				throw new ApiError("No wallet found", 404);
+			}
+
+			if (studentWallet.isLocked) {
+				throw new ApiError("Wallet is locked", 403);
+			}
+
+			if (studentWallet.balanceUSD < acceptedOffer.priceUSD) {
+				throw new ApiError("Insufficient balance", 400);
+			}
+
+			// خصم الرصيد
+			studentWallet.balanceUSD -= acceptedOffer.priceUSD;
+			studentWallet.freezedBalanceUSD += acceptedOffer.priceUSD;
+
+			await studentWallet.save({ session });
+		}
+
+		// ================================
+		// 🟣 Create Chat
+		// ================================
+		const chat = await Chat.findOneAndUpdate(
+			{
+				"participants.instructor": acceptedOffer.instructor._id,
+				"participants.student": student._id,
+				referenceId: orderId,
+				referenceType: "Order",
+			},
+			{
+				$setOnInsert: {
+					type: "order",
+					participants: {
+						instructor: acceptedOffer.instructor._id,
+						student: student._id,
+					},
+					referenceId: orderId,
+					referenceType: "Order",
+				},
+			},
+			{ new: true, upsert: true, session },
+		);
+
+		// ===============================
+		//  CREATE LIVE
+		// ================================
+		const live = await Live.create(
+			[
+				{
+					numberOfTotalSessions: req.body.numberOfSessions,
+					numberOfCreatedSessions: 1, // session 1 is created now
+					numberOfHours: acceptedOffer.estimatedTime,
+					timeOfNextSession: req.body.timeOfNextSession,
+					members: [
+						acceptedOffer.instructor.fullName,
+						acceptedOffer.request.student.fullName,
+					],
+				},
+			],
+			{ session },
+		);
+
+		// generate unique room name
+		const randomString = crypto.randomBytes(6).toString("hex");
+		const roomName = `${acceptedOffer.request.student.fullName}-${live[0]._id}-${randomString}`;
+
+		// public jitsi link
+		const meetingLink = `https://meet.jit.si/${roomName}`;
+
+		// create first session for this live
+		await Session.create(
+			[
+				{
+					liveId: live[0]._id,
+					startTime: 0, // will be updated later when instructor starts the session
+					endTime: 0, // will be updated later when instructor ends the session
+					meetingLink: meetingLink,
+				},
+			],
+			{ session },
+		);
+
+		// ================================
+		// 🟡 Create Order
+		// ================================
+		const order = await Model.create(
+			[
+				{
+					_id: orderId,
+					student: student._id,
+					instructor: acceptedOffer.instructor._id,
+					studentPriceUSD: acceptedOffer.priceUSD,
+					instructorPriceUSD: acceptedOffer.instructorEarningUSD,
+					chatId: chat._id,
+					deadline: acceptedOffer.request.deadline,
+					liveId: live[0]._id,
+					offer: acceptedOffer._id,
+					type: acceptedOffer.type,
+					paymentMethod,
+					paidAt: Date.now(),
+					startedAt: Date.now(),
+				},
+			],
+			{ session },
+		);
+
+		const createdOrder = order[0];
+
+		// ================================
+		// 🟠 Transaction (only wallet)
+		// ================================
+		if (paymentMethod === "wallet") {
+			await Transaction.create(
+				[
+					{
+						wallet: studentWallet._id,
+						type: "debit",
+						status: "completed",
+						amountUSD: createdOrder.studentPriceUSD,
+						balanceBeforeUSD:
+							studentWallet.balanceUSD + createdOrder.studentPriceUSD,
+						balanceAfterUSD: studentWallet.balanceUSD,
+						reason: "order_create",
+						referenceModel: "Order",
+						referenceId: createdOrder._id,
+					},
+				],
+				{ session },
+			);
+		}
+
+		// ✅ Commit
+		await session.commitTransaction();
+		session.endSession();
+
+		// ================================
+		// 🔔 Notifications
+		// ================================
+		await sendNotification({
+			io: req.io,
+			receivers: [student._id],
+			userType: "Student",
+			type: "order_created",
+			title: "Order Created 🎉",
+			body: `Your order has been created`,
+			data: { orderId: createdOrder._id },
+		});
+
+		await sendNotification({
+			io: req.io,
+			receivers: [acceptedOffer.instructor._id],
+			userType: "Instructor",
+			type: "order_created",
+			title: "New Order Assigned 📚",
+			body: `You got a new order`,
+			data: { orderId: createdOrder._id },
+		});
+
+		res.status(200).json({
+			message: "Order created successfully",
+			data: createdOrder,
+		});
+	} catch (err) {
+		await session.abortTransaction();
+		session.endSession();
+		return next(err);
+	}
 });
 
 module.exports = {
@@ -721,4 +1264,5 @@ module.exports = {
 	getLoggedUserVideos,
 	cancelOrder,
 	deleteOrder,
+	createLiveOrder,
 };

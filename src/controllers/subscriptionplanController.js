@@ -29,20 +29,13 @@ const getSubscriptionPlan = getDocument(
  * @access  Private (Admin)
  */ //DONE
 const createSubscriptionPlan = asyncHandler(async (req, res) => {
-	const { name, durationDays, price, currency, isActive } = req.body;
-
-	if (!name) throw new ApiError("Plan name is required", 400);
-	if (!durationDays) throw new ApiError("durationDays is required", 400);
-	if (price === undefined || price === null)
-		throw new ApiError("price is required", 400);
-	if (!currency) throw new ApiError("currency is required", 400);
+	if (!req.body.countries) {
+		req.body.countries = [];
+	}
 
 	const plan = await SubscriptionPlan.create({
-		name,
-		durationDays,
-		price,
-		currency,
-		...(isActive !== undefined && { isActive }),
+		...req.body,
+		availableForAll: req.body.countries.length === 0,
 	});
 
 	res.status(201).json({
@@ -91,9 +84,7 @@ const deleteSubscriptionPlan = asyncHandler(async (req, res) => {
 	}
 
 	res.status(200).json({
-		status: "success",
 		message: "Subscription plan deactivated successfully",
-		data: plan,
 	});
 });
 

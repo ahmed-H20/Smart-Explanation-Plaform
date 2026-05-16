@@ -14,6 +14,7 @@ const {
 	getLoggedUserVideos,
 	cancelOrder,
 	deleteOrder,
+	createLiveOrder,
 } = require("../controllers/orderController");
 const {
 	createOrderValidator,
@@ -21,6 +22,7 @@ const {
 	getOrderValidator,
 	uploadDocsValidator,
 	getUploadVideoUrlValidator,
+	createLiveOrderValidator,
 } = require("../utils/validators/orderValidator");
 const { protect, allowedTo } = require("../controllers/authController");
 
@@ -57,6 +59,14 @@ router
 	.route("/")
 	.post(protect(), allowedTo("student"), createOrderValidator, createOrder)
 	.get(protect(), allowedTo("admin"), getAllOrders);
+
+router.post(
+	"/live",
+	protect(),
+	allowedTo("student"),
+	createLiveOrderValidator,
+	createLiveOrder,
+);
 
 router.put(
 	"/submit/:id",

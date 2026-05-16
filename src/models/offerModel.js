@@ -22,6 +22,11 @@ const offerSchema = mongoose.Schema(
 			type: Number,
 		},
 
+		chatId: {
+			type: mongoose.Schema.ObjectId,
+			ref: "chat",
+		},
+
 		demoVideo: {
 			assetId: {
 				type: String,
@@ -31,7 +36,7 @@ const offerSchema = mongoose.Schema(
 			},
 			status: {
 				type: String,
-				enum: ["waiting", "processing", "ready", "failed"],
+				enum: ["waiting", "processing", "ready", "failed", "without videos"],
 				default: "waiting",
 			},
 			duration: Number,
@@ -39,12 +44,9 @@ const offerSchema = mongoose.Schema(
 			updatedAt: Date,
 		},
 
-		studentPrice: {
-			type: Number,
-			// required: [true, "studentPrice is required"],
-		},
-
-		instructorPrice: Number,
+		priceUSD: Number, // total price
+		instructorEarningUSD: Number,
+		platformProfitUSD: Number,
 
 		status: {
 			type: String,
@@ -57,21 +59,19 @@ const offerSchema = mongoose.Schema(
 			default: false,
 		},
 
-		studentCurrency: {
-			type: String,
-			required: [true, "Student currency is required"],
-		},
-
-		instructorCurrency: {
-			type: String,
-			required: [true, "Instructor currency is required"],
-		},
-
 		allFiles: [String],
 	},
 	{
 		timestamps: true,
 		strict: "throw",
+	},
+);
+
+offerSchema.index(
+	{ request: 1, instructor: 1 },
+	{
+		unique: true,
+		partialFilterExpression: { isDeleted: false },
 	},
 );
 

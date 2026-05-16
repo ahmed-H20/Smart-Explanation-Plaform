@@ -12,7 +12,7 @@ const walletSchema = mongoose.Schema(
 			enum: ["Student", "Instructor"],
 			required: [true, "userType is required"],
 		},
-		balance: {
+		balanceUSD: {
 			type: Number,
 			default: 0,
 		},
@@ -23,7 +23,7 @@ const walletSchema = mongoose.Schema(
 			required: [true, "Country currency code is required"],
 			uppercase: true,
 		},
-		freezedBalance: {
+		freezedBalanceUSD: {
 			type: Number,
 			default: 0,
 		},

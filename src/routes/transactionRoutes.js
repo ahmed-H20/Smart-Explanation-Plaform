@@ -4,7 +4,7 @@ const {
 	createTransaction,
 	getOneTransactionById,
 	getAllTransaction,
-	getAllUserTransactions,
+	getUserTransactions,
 } = require("../controllers/transactionController");
 
 const router = express.Router();
@@ -15,7 +15,7 @@ router
 	.post("/", allowedTo("admin"), createTransaction)
 	.get("/", allowedTo("admin"), getAllTransaction);
 
-router.get("/user/:userId", allowedTo("admin"), getAllUserTransactions);
+router.get("/user", getUserTransactions);
 
 router.get("/:id", allowedTo("admin"), getOneTransactionById);
 

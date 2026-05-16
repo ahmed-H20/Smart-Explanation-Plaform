@@ -116,7 +116,7 @@ async function createWallet() {
 	// Get Country
 	const country = await Country.findById(this.country);
 	if (!country) {
-		return new Error("الدولة غير موجودة");
+		throw new Error("الدولة غير موجودة");
 	}
 
 	// Create Wallet

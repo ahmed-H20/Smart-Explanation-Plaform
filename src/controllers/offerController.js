@@ -2,10 +2,13 @@ const crypto = require("crypto");
 
 const asyncHandler = require("express-async-handler");
 const axios = require("axios");
+const mongoose = require("mongoose");
 
 const { getAllDocuments, updateDocument } = require("./handlerFactory");
 const Model = require("../models/offerModel");
 const ApiError = require("../utils/ApiError");
+const hoursPrice = require("../models/CountryHourlyPricingModel");
+const Chat = require("../models/chatModel");
 
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
 const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
@@ -14,6 +17,7 @@ const {
 	studentAcceptedOfferTemplate,
 	instructorOfferAcceptedTemplate,
 } = require("../utils/emailTemplates");
+const { sendNotification } = require("../utils/sendNotification");
 
 const uploadFiles = uploadMixOfFiles([
 	{
@@ -38,8 +42,6 @@ const fileLocalUpdate = (req, res, next) => {
 const verifyMuxSignature = (req) => {
 	const secret = process.env.MUX_WEBHOOK_SECRET;
 
-	console.log(secret);
-
 	const signatureHeader = req.headers["mux-signature"];
 
 	const parts = signatureHeader.split(",");
@@ -49,10 +51,6 @@ const verifyMuxSignature = (req) => {
 		.createHmac("sha256", secret)
 		.update(req.body) // raw body
 		.digest("hex");
-
-	console.log("hash: ", hash);
-
-	console.log("signature: ", signature);
 
 	return hash === signature;
 };
@@ -175,6 +173,23 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 
 	await offer.save();
 
+	// send notification to instructor to tell him that the upload url is ready or not
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.instructor._id],
+		userType: "Instructor",
+		type: offer.demoVideo.status === "ready" ? "videos_update" : "system_alert",
+		title:
+			offer.demoVideo.status === "ready"
+				? "Video is Ready! 🎉"
+				: "Video Upload Failed ❌",
+		body:
+			offer.demoVideo.status === "ready"
+				? "Your video has been processed and is now ready to be viewed."
+				: "There was an issue processing your video. Please try uploading again.",
+		data: { offerId: offer._id },
+	});
+
 	return res.status(200).json({ message: "Webhook processed" });
 });
 
@@ -189,6 +204,17 @@ const createOffer = asyncHandler(async (req, res) => {
 		// 	uploadUrl: req.body.demoVideo.uploadUrl,
 		// 	status: "waiting",
 		// },
+	});
+
+	// send notification to student to tell him that there is new offer for his request
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.request.student],
+		userType: "Student",
+		type: "offer_created",
+		title: "New Offer for Your Request! 🎉",
+		body: "An instructor has created a new offer for your request. Check it out!",
+		data: { offerId: offer._id },
 	});
 
 	res.status(201).json({
@@ -255,15 +281,35 @@ const getOffer = asyncHandler(async (req, res, next) => {
 		videoLinks = await createMuxPlaybackTokens(offer.demoVideo.playbackId);
 	}
 
-	console.log(offer);
-
 	res.status(200).json({ data: offer, videoLinks: videoLinks });
 });
 
 // @desc update one offers by id
 // @route PATCH api/v1/offers/:id
 // @access privet instructor
-const updateOffer = updateDocument(Model, Model.modelName);
+const updateOffer = asyncHandler(async (req, res, next) => {
+	const { id } = req.params;
+	const offer = await Model.findByIdAndUpdate(id, req.body, { new: true });
+
+	if (!offer) {
+		return next(
+			new ApiError(`cannot find ${Model.modelName} with id : ${id}`, 404),
+		);
+	}
+
+	// send notification to student to tell him that the offer is updated
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.request.student],
+		userType: "Student",
+		type: "offer_updated",
+		title: "Offer Updated! 🔄",
+		body: `The instructor ${offer.instructor.fullName} has updated the offer for your request. Check the new details!`,
+		data: { offerId: offer._id },
+	});
+
+	res.status(200).json({ data: offer });
+});
 
 // @desc delete one offers by id
 // @route DELETE api/v1/offers/:id
@@ -290,11 +336,20 @@ const deleteOffer = asyncHandler(async (req, res, next) => {
 const cancelOffer = asyncHandler(async (req, res, next) => {
 	const offer = req.offerDoc;
 
-	console.log(offer);
-
 	offer.status = "cancelled";
 
 	await offer.save();
+
+	// send notification to student to tell him that the offer is cancelled
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.request.student],
+		userType: "Student",
+		type: "offer_cancelled",
+		title: "Offer Cancelled ❌",
+		body: `The instructor ${offer.instructor.fullName} has cancelled the offer for your request.`,
+		data: { offerId: offer._id },
+	});
 
 	res.status(200).json({
 		message: "offer canceled",
@@ -316,6 +371,162 @@ const acceptOffer = asyncHandler(async (req, res, next) => {
 	offer.status = "accepted";
 	offer.allFiles = req.body.allFiles || [];
 	await offer.save();
+
+	// create chat for this offer
+	const chat = await Chat.create({
+		participants: {
+			instructor: offer.instructor,
+			student: offer.request.student,
+		},
+		referenceId: offer._id,
+		referenceType: "Offer",
+		type: "trialOffer",
+	});
+
+	offer.chatId = chat._id;
+	await offer.save();
+
+	// send notification to instructor to tell him that the offer is accepted
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.instructor._id],
+		userType: "Instructor",
+		type: "offer_accepted",
+		title: "Offer Accepted! ✅",
+		body: `The student ${offer.request.student.fullName} has accepted your offer.`,
+		data: { offerId: offer._id },
+	});
+
+	await sendEmail({
+		to: offer.request.student.email,
+		subject: "You Accepted the Offer! 🎉",
+		html: studentAcceptedOfferTemplate(offer, offer.request.student.fullName),
+	});
+
+	await sendEmail({
+		to: offer.instructor.email,
+		subject: "Student Accepted Your Offer ✅",
+		html: instructorOfferAcceptedTemplate(offer, offer.instructor.fullName),
+	});
+
+	res.status(200).json({
+		message: "Offer accepted",
+		offer,
+	});
+});
+
+// @desc create offer (Direct Request)
+// @route POST api/v1/offers/direct
+// @access privet Instructor
+const createDirectOffer = asyncHandler(async (req, res) => {
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		const { request } = req;
+		const { estimateTime } = req.body;
+
+		const offer = await Model.create(
+			[
+				{
+					request: request._id,
+					instructor: req.user._id,
+					estimatedTime: estimateTime,
+					demoVideo: {
+						status: "without videos",
+					},
+				},
+			],
+			{ session },
+		);
+
+		const countries = [request.student.country, req.user.country._id];
+
+		const pricingList = await hoursPrice
+			.find({
+				countryId: { $in: countries },
+			})
+			.session(session);
+
+		const pricingData = pricingList.reduce((acc, obj) => {
+			acc[obj.countryId._id.toString()] = obj;
+			return acc;
+		}, {});
+
+		const studentPrice =
+			pricingData[request.student.country].studentHourlyRateUSD * estimateTime;
+
+		const instructorPrice =
+			pricingData[req.user.country._id].instructorHourlyRateUSD * estimateTime;
+
+		offer[0].priceUSD = studentPrice;
+		offer[0].instructorEarningUSD = instructorPrice;
+		offer[0].platformProfitUSD = studentPrice - instructorPrice;
+		offer[0].estimatedTime = estimateTime;
+
+		await offer[0].save({ session });
+
+		await session.commitTransaction();
+		session.endSession();
+
+		// send notification to student to tell him that there is new offer for his request
+		await sendNotification({
+			io: req.io,
+			receivers: [request.student._id],
+			userType: "Student",
+			type: "offer_created",
+			title: "New Offer for Your Request! 🎉",
+			body: "An instructor has created a new offer for your request. Check it out!",
+			data: { offerId: offer[0]._id },
+		});
+
+		res.status(201).json({
+			message: "Offer created successfully",
+			offer: offer[0],
+		});
+	} catch (error) {
+		await session.abortTransaction();
+		session.endSession();
+		throw error;
+	}
+});
+
+// @desc accept one offers by id (Direct Request)
+// @route PATCH api/v1/offers/:id/accept
+// @access privet student
+const acceptOfferForDirectRequest = asyncHandler(async (req, res, next) => {
+	const { offer } = req; // already fetched in validator
+
+	const session = await mongoose.startSession();
+	session.startTransaction();
+
+	try {
+		await Model.updateMany(
+			{ request: offer.request._id, _id: { $ne: offer._id } },
+			{ $set: { status: "rejected" } },
+			{ session },
+		);
+
+		offer.status = "accepted";
+		offer.allFiles = offer.request.files;
+		await offer.save({ session });
+
+		await session.commitTransaction();
+	} catch (err) {
+		await session.abortTransaction();
+		throw err;
+	}
+
+	// send notification to instructor to tell him that the offer is accepted
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.instructor],
+		userType: "Instructor",
+		type: "offer_accepted",
+		title: "Offer Accepted! ✅",
+		body: `The student ${offer.request.student.fullName} has accepted your offer.`,
+		data: { offerId: offer._id },
+	});
 
 	await sendEmail({
 		to: offer.request.student.email,
@@ -341,27 +552,51 @@ const acceptOffer = asyncHandler(async (req, res, next) => {
 const setEstimatedTimeAndPrice = asyncHandler(async (req, res, next) => {
 	const { estimatedTime } = req.body;
 
+	// 1- get offer
 	const offer = req.offerDoc;
 
+	// 2- get all hoursPrice
+	const countries = [offer.request.student.country, offer.instructor.country];
+
+	const pricingList = await hoursPrice.find({
+		countryId: { $in: countries },
+	});
+
+	// 3- reformat pricing data to easily get price by country
+	const pricingData = pricingList.reduce((acc, obj) => {
+		acc[obj.countryId._id.toString()] = obj;
+		return acc;
+	}, {});
+
+	// Price in USD =  rate in USD * estimated time
 	const studentPrice =
-		offer.studentCurrency === "SAR" ? estimatedTime * 40 : estimatedTime * 200;
+		pricingData[offer.request.student.country].studentHourlyRateUSD *
+		estimatedTime;
 
 	const instructorPrice =
-		offer.instructorCurrency === "SAR"
-			? estimatedTime * 40
-			: estimatedTime * 200;
+		pricingData[offer.instructor.country].instructorHourlyRateUSD *
+		estimatedTime;
 
-	offer.instructorPrice = instructorPrice;
-	offer.studentPrice = studentPrice;
+	offer.priceUSD = studentPrice;
+	offer.instructorEarningUSD = instructorPrice;
+	offer.platformProfitUSD = studentPrice - instructorPrice;
 	offer.estimatedTime = estimatedTime;
 
 	await offer.save();
 
+	// send notification to student to tell him that the offer is updated
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.request.student],
+		userType: "Student",
+		type: "offer_updated",
+		title: "Offer Updated! 📝",
+		body: "The instructor has updated the estimated time and price for your offer.",
+		data: { offerId: offer._id },
+	});
+
 	res.status(200).json({ message: "offer price set", offer: offer });
 });
-// 1 hour -> 40SA -> 200LE
-
-// create order
 
 module.exports = {
 	getUploadVideoUrl,
@@ -378,4 +613,7 @@ module.exports = {
 	uploadFiles,
 	fileLocalUpdate,
 	setEstimatedTimeAndPrice,
+	// Direct
+	createDirectOffer,
+	acceptOfferForDirectRequest,
 };

@@ -1,4 +1,5 @@
 const { check, param } = require("express-validator");
+const mongoose = require("mongoose");
 
 const validatorMiddleware = require("../../middlewares/validatorMiddleware");
 const SubscriptionPlan = require("../../models/SubscriptionplanModel");
@@ -13,23 +14,31 @@ exports.createSubscriptionPlanValidator = [
 		.isLength({ min: 2 })
 		.withMessage("Plan name must be at least 2 characters long"),
 
-	check("durationDays")
+	check("numberOfHours")
 		.notEmpty()
-		.withMessage("durationDays is required")
+		.withMessage("numberOfHours is required")
 		.isInt({ min: 1 })
-		.withMessage("durationDays must be a positive integer"),
+		.withMessage("numberOfHours must be a positive integer"),
 
-	check("price")
+	check("priceUSD")
 		.notEmpty()
-		.withMessage("price is required")
+		.withMessage("priceUSD is required")
 		.isFloat({ min: 0 })
-		.withMessage("price must be a positive number"),
+		.withMessage("priceUSD must be a positive number"),
 
-	check("currency")
-		.notEmpty()
-		.withMessage("currency is required")
-		.isLength({ min: 2, max: 5 })
-		.withMessage("currency must be valid (ex: EGP, USD)"),
+	check("countries")
+		.optional()
+		.isArray()
+		.withMessage("countries must be an array of country IDs"),
+
+	check("countries.*")
+		.optional()
+		.custom((countryId) => {
+			if (!mongoose.Types.ObjectId.isValid(countryId)) {
+				throw new Error(`Invalid country id: ${countryId}`);
+			}
+			return true;
+		}),
 
 	check("isActive")
 		.optional()
@@ -50,20 +59,46 @@ exports.updateSubscriptionPlanValidator = [
 		.isLength({ min: 2 })
 		.withMessage("Plan name must be at least 2 characters long"),
 
-	check("durationDays")
+	check("numberOfHours")
 		.optional()
 		.isInt({ min: 1 })
-		.withMessage("durationDays must be a positive integer"),
+		.withMessage("number Of Hours must be a positive integer"),
 
-	check("price")
+	check("priceUSD")
 		.optional()
 		.isFloat({ min: 0 })
-		.withMessage("price must be a positive number"),
+		.withMessage("priceUSD must be a positive number"),
 
-	check("currency")
+	check("availableForAll")
 		.optional()
-		.isLength({ min: 2, max: 5 })
-		.withMessage("currency must be valid (ex: EGP, USD)"),
+		.isBoolean()
+		.withMessage("availableForAll must be boolean"),
+
+	check("countries").custom((value, { req }) => {
+		// ✅ if available for all => countries must be empty
+		if (req.body.availableForAll === true) {
+			if (Array.isArray(value) && value.length > 0) {
+				throw new Error(
+					"countries must be an empty array when availableForAll is true",
+				);
+			}
+		}
+
+		// ✅ if NOT available for all => countries required
+		if (req.body.availableForAll === false) {
+			if (!Array.isArray(value) || value.length === 0) {
+				throw new Error("countries is required when availableForAll is false");
+			}
+
+			value.forEach((countryId) => {
+				if (!mongoose.Types.ObjectId.isValid(countryId)) {
+					throw new Error(`Invalid country id: ${countryId}`);
+				}
+			});
+		}
+
+		return true;
+	}),
 
 	check("isActive")
 		.optional()

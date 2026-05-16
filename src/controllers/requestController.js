@@ -17,6 +17,7 @@ const Model = require("../models/requestModel");
 const ApiError = require("../utils/ApiError");
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
 const { addEmailJob } = require("../queues/email/emailQueue");
+const { sendNotification } = require("../utils/sendNotification");
 
 const uploadFiles = uploadMixOfFiles([
 	{
@@ -78,7 +79,25 @@ const getLoggedStudentRequests = asyncHandler(async (req, res, next) => {
 // @desc create new Request
 // @route POST /api/v1/Requests
 // @access private student //DONE
-const createRequest = createDocument(Model, Model.modelName);
+const createRequest = asyncHandler(async (req, res, next) => {
+	const request = await Model.create(req.body);
+
+	// send notification to all instructors when new request is created
+	await sendNotification({
+		io: req.io,
+		receivers: await instructorModel.find().distinct("_id"),
+		userType: "Instructor",
+		type: "request_created",
+		title: "New Request Created",
+		body: `A new ${request.type} request has been created.`,
+		data: { requestId: request._id, title: request?.title },
+	});
+
+	res.status(201).json({
+		status: "success",
+		data: request,
+	});
+});
 
 // @desc get all Requests
 // @route GET /api/v1/Requests
@@ -99,6 +118,17 @@ const updateRequest = asyncHandler(async (req, res, next) => {
 	Object.assign(request, req.body);
 
 	await request.save();
+
+	// send notification to all instructors when new request is updated
+	await sendNotification({
+		io: req.io,
+		receivers: await instructorModel.find().distinct("_id"),
+		userType: "Instructor",
+		type: "request_updated",
+		title: "Request Updated",
+		body: `A ${request.type} request has been updated.`,
+		data: { requestId: request._id, title: request?.title },
+	});
 
 	res.status(200).json({
 		message: `request is Updated`,
@@ -142,6 +172,17 @@ const changeRequestStatus = asyncHandler(async (req, res, next) => {
 		return next(new ApiError("Cannot find this request"));
 	}
 
+	// send notification to all instructors when new request is change status
+	await sendNotification({
+		io: req.io,
+		receivers: await instructorModel.find().distinct("_id"),
+		userType: "Instructor",
+		type: "request_status_changed",
+		title: "Request Status Changed",
+		body: `A ${request.type} request status has been changed.`,
+		data: { requestId: request._id, title: request?.title },
+	});
+
 	res.status(200).json({
 		message: "status updated",
 		data: request,
@@ -153,8 +194,6 @@ const changeRequestStatus = asyncHandler(async (req, res, next) => {
 // @access private student //DONE
 const cancelRequest = asyncHandler(async (req, res, next) => {
 	const request = req.requestDoc;
-
-	console.log("cancel: ", request);
 
 	request.status = "cancelled";
 
@@ -207,6 +246,17 @@ const createDirectRequest = asyncHandler(async (req, res, next) => {
 			path: "country",
 			select: "currencyCode",
 		},
+	});
+
+	// send notification to all instructors when new direct request is created
+	await sendNotification({
+		io: req.io,
+		receivers: instructors.map((inst) => inst._id),
+		userType: "Instructor",
+		type: "direct_request_created",
+		title: "New Direct Request Created",
+		body: `A new direct request has been created with title: ${directRequest.title}.`,
+		data: { requestId: directRequest._id, title: directRequest?.title },
 	});
 
 	//4- send email to all instructors with worker (email queue)
