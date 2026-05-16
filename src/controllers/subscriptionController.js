@@ -11,24 +11,20 @@ const {
  * @desc    Subscribe the authenticated student to a plan
  * @route   POST /api/v1/subscriptions
  * @access  Private (Student)
- * @body    { planId, majorId }
+ * @body    { planId }
  */
 const subscribe = asyncHandler(async (req, res) => {
 	const studentId = req.user._id;
-	const { planId, majorId } = req.body;
+	const { planId } = req.body;
+	const { user } = req;
 
 	if (!planId) {
 		return res
 			.status(400)
 			.json({ status: "fail", message: "planId is required" });
 	}
-	if (!majorId) {
-		return res
-			.status(400)
-			.json({ status: "fail", message: "majorId is required" });
-	}
 
-	const subscription = await createSubscription({ studentId, planId, majorId });
+	const subscription = await createSubscription({ studentId, planId, req });
 
 	res.status(201).json({
 		status: "success",
@@ -93,7 +89,7 @@ const cancelSubscriptionHandler = asyncHandler(async (req, res) => {
 	const studentId = req.user._id;
 	const subscriptionId = req.params.id;
 
-	const subscription = await cancelSubscription(subscriptionId, studentId);
+	const subscription = await cancelSubscription(subscriptionId, studentId, req);
 
 	res.status(200).json({
 		status: "success",

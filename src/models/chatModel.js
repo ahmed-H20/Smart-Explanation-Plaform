@@ -64,5 +64,5 @@ chatSchema.pre(/^find/, function () {
 	this.where({ isDeleted: false });
 });
 
-const chatModel = mongoose.model("chat", chatSchema);
+const chatModel = mongoose.model("Chat", chatSchema);
 module.exports = chatModel;

@@ -72,7 +72,7 @@ function normalizeData(obj) {
 	return normalized;
 }
 
-module.exports = function responseFormatter(req, res, next) {
+function responseFormatter(req, res, next) {
 	const oldJson = res.json;
 
 	res.json = async function (data) {
@@ -85,4 +85,6 @@ module.exports = function responseFormatter(req, res, next) {
 	};
 
 	next();
-};
+}
+
+module.exports = { responseFormatter, transformObject };

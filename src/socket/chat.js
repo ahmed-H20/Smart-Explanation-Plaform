@@ -31,8 +31,6 @@ module.exports = (io, socket) => {
 				content,
 			});
 
-			console.log("Message saved:", message);
-
 			// update last message
 			await Chat.findByIdAndUpdate(chatId, {
 				lastMessageId: message._id,

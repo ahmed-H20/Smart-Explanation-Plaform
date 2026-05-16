@@ -24,9 +24,11 @@ const SubscriptionPlanRoutes = require("./src/routes/subscriptionplanRoutes");
 const Subscription = require("./src/routes/subscriptionRoutes");
 const HourlyPrices = require("./src/routes/CountryHourlyPricingRoutes");
 const chatRoutes = require("./src/routes/chatRoutes");
+const notificationsRoutes = require("./src/routes/notificationsRoutes");
+const liveRoutes = require("./src/routes/liveRoutes");
 const { connectRedis } = require("./src/config/redis");
 const expireSubscriptions = require("./src/crons/Expiresubscriptions");
-const responseFormatter = require("./src/middlewares/responseFormatter");
+const { responseFormatter } = require("./src/middlewares/responseFormatter");
 
 // Create app
 const app = express();
@@ -51,6 +53,12 @@ app.use(express.json());
 app.use(express.static(path.join("upload"))); //to make url for statics files
 app.use(responseFormatter);
 
+// Add io to req
+app.use((req, res, next) => {
+	req.io = io;
+	next();
+});
+
 // Mount Routes
 app.use("/api/v1/instructors", InstructorRoutes);
 app.use("/api/v1/students", StudentRoutes);
@@ -68,6 +76,8 @@ app.use("/api/v1/subscriptionPlan", SubscriptionPlanRoutes);
 app.use("/api/v1/subscriptions", Subscription);
 app.use("/api/v1/hourlyPrices", HourlyPrices);
 app.use("/api/v1/chats", chatRoutes);
+app.use("/api/v1/notifications", notificationsRoutes);
+app.use("/api/v1/lives", liveRoutes);
 
 // Not found route
 app.use((req, res, next) => {
@@ -79,10 +89,6 @@ app.use((req, res, next) => {
 app.use(GlobalError);
 
 // create server listener
-app.use((req, res, next) => {
-	req.io = io;
-	next();
-});
 socketInit(io); // Initialize socket connections and events
 const port = process.env.PORT || 8000;
 server.listen(port, () => {

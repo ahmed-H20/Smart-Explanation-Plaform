@@ -11,5 +11,5 @@ mongoose.connect(process.env.DB_URL).then(() => {
 
 	updateRate.start();
 
-	expireSubscriptions.start();
+	// expireSubscriptions.start();
 });

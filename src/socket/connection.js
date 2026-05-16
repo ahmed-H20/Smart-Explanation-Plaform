@@ -3,11 +3,11 @@ const jwt = require("jsonwebtoken");
 const studentModel = require("../models/studentsModel");
 const instructorModel = require("../models/instructorsModel");
 const chatHandler = require("./chat");
+const notificationHandler = require("./notification");
 
 module.exports = (io) => {
 	// 🔐 auth middleware
 	io.use(async (socket, next) => {
-		console.log("Socket auth middleware triggered", socket.handshake);
 		try {
 			const token =
 				socket.handshake.auth?.token || socket.handshake.query?.token;
@@ -40,8 +40,12 @@ module.exports = (io) => {
 	io.on("connection", (socket) => {
 		console.log("User connected:", socket.user.id);
 
-		// 🟢 personal room (notifications)
-		socket.join(socket.user.id);
+		// 🟢 personal room
+		socket.join(socket.user.id.toString());
+
+		// 🟢 role room (notifications)
+		if (socket.user.role === "student") socket.join("students");
+		if (socket.user.role === "instructor") socket.join("instructors");
 
 		// get socket rooms
 		const rooms = Array.from(socket.rooms);
@@ -49,6 +53,7 @@ module.exports = (io) => {
 
 		// 🟢 register modules
 		chatHandler(io, socket);
+		notificationHandler(io, socket);
 
 		socket.on("disconnect", () => {
 			console.log("User disconnected:", socket.user.id);

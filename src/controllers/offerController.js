@@ -8,6 +8,7 @@ const { getAllDocuments, updateDocument } = require("./handlerFactory");
 const Model = require("../models/offerModel");
 const ApiError = require("../utils/ApiError");
 const hoursPrice = require("../models/CountryHourlyPricingModel");
+const Chat = require("../models/chatModel");
 
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
 const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
@@ -16,6 +17,7 @@ const {
 	studentAcceptedOfferTemplate,
 	instructorOfferAcceptedTemplate,
 } = require("../utils/emailTemplates");
+const { sendNotification } = require("../utils/sendNotification");
 
 const uploadFiles = uploadMixOfFiles([
 	{
@@ -171,6 +173,23 @@ const handleMuxWebhook = asyncHandler(async (req, res, next) => {
 
 	await offer.save();
 
+	// send notification to instructor to tell him that the upload url is ready or not
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.instructor._id],
+		userType: "Instructor",
+		type: offer.demoVideo.status === "ready" ? "videos_update" : "system_alert",
+		title:
+			offer.demoVideo.status === "ready"
+				? "Video is Ready! 🎉"
+				: "Video Upload Failed ❌",
+		body:
+			offer.demoVideo.status === "ready"
+				? "Your video has been processed and is now ready to be viewed."
+				: "There was an issue processing your video. Please try uploading again.",
+		data: { offerId: offer._id },
+	});
+
 	return res.status(200).json({ message: "Webhook processed" });
 });
 
@@ -185,6 +204,17 @@ const createOffer = asyncHandler(async (req, res) => {
 		// 	uploadUrl: req.body.demoVideo.uploadUrl,
 		// 	status: "waiting",
 		// },
+	});
+
+	// send notification to student to tell him that there is new offer for his request
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.request.student],
+		userType: "Student",
+		type: "offer_created",
+		title: "New Offer for Your Request! 🎉",
+		body: "An instructor has created a new offer for your request. Check it out!",
+		data: { offerId: offer._id },
 	});
 
 	res.status(201).json({
@@ -257,7 +287,29 @@ const getOffer = asyncHandler(async (req, res, next) => {
 // @desc update one offers by id
 // @route PATCH api/v1/offers/:id
 // @access privet instructor
-const updateOffer = updateDocument(Model, Model.modelName);
+const updateOffer = asyncHandler(async (req, res, next) => {
+	const { id } = req.params;
+	const offer = await Model.findByIdAndUpdate(id, req.body, { new: true });
+
+	if (!offer) {
+		return next(
+			new ApiError(`cannot find ${Model.modelName} with id : ${id}`, 404),
+		);
+	}
+
+	// send notification to student to tell him that the offer is updated
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.request.student],
+		userType: "Student",
+		type: "offer_updated",
+		title: "Offer Updated! 🔄",
+		body: `The instructor ${offer.instructor.fullName} has updated the offer for your request. Check the new details!`,
+		data: { offerId: offer._id },
+	});
+
+	res.status(200).json({ data: offer });
+});
 
 // @desc delete one offers by id
 // @route DELETE api/v1/offers/:id
@@ -288,6 +340,17 @@ const cancelOffer = asyncHandler(async (req, res, next) => {
 
 	await offer.save();
 
+	// send notification to student to tell him that the offer is cancelled
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.request.student],
+		userType: "Student",
+		type: "offer_cancelled",
+		title: "Offer Cancelled ❌",
+		body: `The instructor ${offer.instructor.fullName} has cancelled the offer for your request.`,
+		data: { offerId: offer._id },
+	});
+
 	res.status(200).json({
 		message: "offer canceled",
 		data: offer,
@@ -308,6 +371,31 @@ const acceptOffer = asyncHandler(async (req, res, next) => {
 	offer.status = "accepted";
 	offer.allFiles = req.body.allFiles || [];
 	await offer.save();
+
+	// create chat for this offer
+	const chat = await Chat.create({
+		participants: {
+			instructor: offer.instructor,
+			student: offer.request.student,
+		},
+		referenceId: offer._id,
+		referenceType: "Offer",
+		type: "trialOffer",
+	});
+
+	offer.chatId = chat._id;
+	await offer.save();
+
+	// send notification to instructor to tell him that the offer is accepted
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.instructor._id],
+		userType: "Instructor",
+		type: "offer_accepted",
+		title: "Offer Accepted! ✅",
+		body: `The student ${offer.request.student.fullName} has accepted your offer.`,
+		data: { offerId: offer._id },
+	});
 
 	await sendEmail({
 		to: offer.request.student.email,
@@ -381,6 +469,17 @@ const createDirectOffer = asyncHandler(async (req, res) => {
 		await session.commitTransaction();
 		session.endSession();
 
+		// send notification to student to tell him that there is new offer for his request
+		await sendNotification({
+			io: req.io,
+			receivers: [request.student._id],
+			userType: "Student",
+			type: "offer_created",
+			title: "New Offer for Your Request! 🎉",
+			body: "An instructor has created a new offer for your request. Check it out!",
+			data: { offerId: offer[0]._id },
+		});
+
 		res.status(201).json({
 			message: "Offer created successfully",
 			offer: offer[0],
@@ -417,6 +516,17 @@ const acceptOfferForDirectRequest = asyncHandler(async (req, res, next) => {
 		await session.abortTransaction();
 		throw err;
 	}
+
+	// send notification to instructor to tell him that the offer is accepted
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.instructor],
+		userType: "Instructor",
+		type: "offer_accepted",
+		title: "Offer Accepted! ✅",
+		body: `The student ${offer.request.student.fullName} has accepted your offer.`,
+		data: { offerId: offer._id },
+	});
 
 	await sendEmail({
 		to: offer.request.student.email,
@@ -473,6 +583,17 @@ const setEstimatedTimeAndPrice = asyncHandler(async (req, res, next) => {
 	offer.estimatedTime = estimatedTime;
 
 	await offer.save();
+
+	// send notification to student to tell him that the offer is updated
+	await sendNotification({
+		io: req.io,
+		receivers: [offer.request.student],
+		userType: "Student",
+		type: "offer_updated",
+		title: "Offer Updated! 📝",
+		body: "The instructor has updated the estimated time and price for your offer.",
+		data: { offerId: offer._id },
+	});
 
 	res.status(200).json({ message: "offer price set", offer: offer });
 });

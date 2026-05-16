@@ -228,6 +228,12 @@ const acceptOfferValidator = [
 					select: "email fullName",
 				},
 			]);
+
+			// accept only offers on student's requests
+			if (offer.request?.student?._id.toString() !== req.user._id.toString()) {
+				throw new Error("ليس لديك الصلاحية لقبول هذا العرض");
+			}
+
 			if (!offer) {
 				throw new Error("العرض بهذا id غير موجود");
 			}

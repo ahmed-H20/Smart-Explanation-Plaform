@@ -22,6 +22,11 @@ const offerSchema = mongoose.Schema(
 			type: Number,
 		},
 
+		chatId: {
+			type: mongoose.Schema.ObjectId,
+			ref: "chat",
+		},
+
 		demoVideo: {
 			assetId: {
 				type: String,

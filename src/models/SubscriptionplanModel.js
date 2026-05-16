@@ -42,6 +42,16 @@ const subscriptionPlanSchema = new mongoose.Schema(
 // Index for fast lookups of active plans
 subscriptionPlanSchema.index({ isActive: 1 });
 
-//TODO : find active only middleware
+//find active only middleware
+subscriptionPlanSchema.pre(/^find/, function () {
+	// If the query has ?all=true, skip filtering by isActive
+	if (this.getQuery().all) {
+		delete this.getQuery().all; // Remove the all parameter from the query
+		return;
+	}
+
+	// Otherwise, only return active plans
+	this.find({ isActive: true });
+});
 
 module.exports = mongoose.model("SubscriptionPlan", subscriptionPlanSchema);

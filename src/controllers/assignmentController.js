@@ -16,6 +16,7 @@ const ApiError = require("../utils/ApiError");
 const { addEmailJob } = require("../queues/email/emailQueue");
 const { uploadMixOfFiles } = require("../middlewares/uploadFilesMiddleware");
 const { createMuxPlaybackTokens } = require("../utils/generateVedioToken");
+const { sendNotification } = require("../utils/sendNotification");
 
 // @desc create new Assignment Request
 // @route POST /api/v1/assignments/createRequests
@@ -46,6 +47,17 @@ const createRequest = asyncHandler(async (req, res, next) => {
 	// 3- send emails to all users by queue
 	// get all instructors
 	const instructors = await Instructor.find();
+
+	// send notification to all instructors
+	await sendNotification({
+		io: req.io,
+		receivers: instructors,
+		userType: "Instructor",
+		type: "create_request",
+		title: "New Assignment Request! 📝",
+		body: "A new assignment request has been created. Check it out!",
+		data: { requestId: request._id },
+	});
 
 	// create jobs
 	await Promise.all(
@@ -133,6 +145,17 @@ const acceptAssignmentRequest = asyncHandler(async (req, res, next) => {
 		await session.commitTransaction();
 		session.endSession();
 
+		// Send notifications to student and instructor
+		await sendNotification({
+			io: req.io,
+			receivers: [request.student, req.user],
+			userType: "Student",
+			type: "offer_accepted",
+			title: "Offer Accepted! 🎉",
+			body: "Your offer has been accepted by the student.",
+			data: { offerId: offerId },
+		});
+
 		// 7️⃣ Send response
 		res.status(201).json({
 			message: "Request accepted successfully",
@@ -178,6 +201,17 @@ const uploadSolvedPdf = asyncHandler(async (req, res, next) => {
 	//2- update order docs
 	order.documents = req.body.documents || [];
 	await order.save();
+
+	//3- send notification to student
+	await sendNotification({
+		io: req.io,
+		receivers: [order.student],
+		userType: "Student",
+		type: "solution_uploaded",
+		title: "Solution Uploaded! 📄",
+		body: `The instructor has uploaded the solution for your order. Check it out!`,
+		data: { orderId: order._id },
+	});
 
 	res.status(200).json({
 		message: "Solution file is uploaded successfully",
@@ -295,6 +329,17 @@ const approveAssignmentSolution = asyncHandler(async (req, res, next) => {
 			await order.save({ session });
 		});
 
+		// send notification to instructor
+		await sendNotification({
+			io: req.io,
+			receivers: [order.instructor],
+			userType: "Instructor",
+			type: "order_completed",
+			title: "Order Approved! 🎉",
+			body: `The student has approved the solution for order ${order._id}. The payment has been transferred to your wallet.`,
+			data: { orderId: order._id },
+		});
+
 		res.status(200).json({
 			status: "success",
 			message: "Solution approved and payment transferred to instructor",
@@ -323,6 +368,17 @@ const requestAssignmentMeeting = asyncHandler(async (req, res, next) => {
 	order.status = "meeting_requested";
 
 	await order.save();
+
+	// send notification to instructor
+	await sendNotification({
+		io: req.io,
+		receivers: [order.instructor],
+		userType: "Instructor",
+		type: "meeting_requested",
+		title: "Meeting Requested! 📅",
+		body: `A meeting has been requested for order ${order._id}. Please respond accordingly.`,
+		data: { orderId: order._id },
+	});
 
 	res.status(200).json({
 		status: "success",
@@ -356,6 +412,17 @@ const scheduleAssignmentMeeting = asyncHandler(async (req, res, next) => {
 	order.status = "meeting_scheduled";
 
 	await order.save();
+
+	// send notification to student
+	await sendNotification({
+		io: req.io,
+		receivers: [order.student],
+		userType: "Student",
+		type: "meeting_scheduled",
+		title: "Meeting Scheduled! 📅",
+		body: `A meeting has been scheduled for order ${order._id}. Please check your calendar.`,
+		data: { orderId: order._id },
+	});
 
 	res.status(200).json({
 		status: "success",

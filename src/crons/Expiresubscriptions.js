@@ -20,7 +20,7 @@ const Subscription = require("../models/subscriptionModel");
  * To run every hour instead: "0 * * * *"
  */
 const expireSubscriptions = cron.schedule(
-	"* * * * *",
+	"0 0 * * *",
 	async () => {
 		try {
 			const now = new Date();
@@ -28,7 +28,7 @@ const expireSubscriptions = cron.schedule(
 			const result = await Subscription.updateMany(
 				{
 					status: "active",
-					endDate: { $lte: now },
+					numberOfHours: { $lte: 0 }, // endDate <= now is equivalent to numberOfHours <= 0
 				},
 				{
 					$set: { status: "expired" },
@@ -40,7 +40,7 @@ const expireSubscriptions = cron.schedule(
 					`[Cron] Subscription expiry — ${result.modifiedCount} subscription(s) marked as expired at ${now.toISOString()}`,
 				);
 			} else {
-				console.log("test corn sucsses");
+				console.log("test cron success");
 			}
 		} catch (err) {
 			console.error("[Cron] Subscription expiry job failed:", err.message);

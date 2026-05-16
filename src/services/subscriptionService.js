@@ -3,8 +3,9 @@ const Subscription = require("../models/subscriptionModel");
 const SubscriptionPlan = require("../models/SubscriptionplanModel");
 const Wallet = require("../models/walletModel"); // Adjust path to your existing wallet model
 const Transaction = require("../models/transactionsModel"); // Adjust path to your existing transaction model
-const Major = require("../models/majorModel");
 const ApiError = require("../utils/ApiError"); // Adjust path to your existing ApiError utility
+const { transformObject } = require("../middlewares/responseFormatter");
+const { sendNotification } = require("../utils/sendNotification");
 
 /**
  * Subscribe a student to a plan.
@@ -15,10 +16,9 @@ const ApiError = require("../utils/ApiError"); // Adjust path to your existing A
  * @param {Object} options
  * @param {string} options.studentId   - Authenticated student's _id
  * @param {string} options.planId      - SubscriptionPlan _id
- * @param {string} options.majorId     - Major _id the subscription is bound to
  * @returns {Promise<Subscription>}
  */
-const createSubscription = async ({ studentId, planId, majorId }) => {
+const createSubscription = async ({ studentId, planId, req }) => {
 	// ── 1. Validate plan outside the session (read-only, no write contention) ──
 	const plan = await SubscriptionPlan.findById(planId);
 
@@ -36,6 +36,9 @@ const createSubscription = async ({ studentId, planId, majorId }) => {
 		userType: "Student",
 	});
 
+	const formattedWallet = await transformObject(wallet, req.user);
+	const formattedPlan = await transformObject(plan, req.user);
+
 	if (!wallet) {
 		throw new ApiError("Wallet not found for this student", 404);
 	}
@@ -44,9 +47,9 @@ const createSubscription = async ({ studentId, planId, majorId }) => {
 		throw new ApiError("Your wallet is locked. Please contact support.", 403);
 	}
 
-	if (wallet.balance < plan.price) {
+	if (wallet.balanceUSD < plan.priceUSD) {
 		throw new ApiError(
-			`Insufficient wallet balance. Required: ${plan.price} ${plan.currency}, Available: ${wallet.balance} ${wallet.currencyCode}`,
+			`Insufficient wallet balance. Required: ${formattedPlan._doc.price.amount} ${formattedPlan._doc.price.currency}, Available: ${formattedWallet._doc.balance.amount} ${formattedWallet._doc.balance.currency}`,
 			400,
 		);
 	}
@@ -56,15 +59,11 @@ const createSubscription = async ({ studentId, planId, majorId }) => {
 	// unique partial index which would throw a less readable duplicate-key error.
 	const existingActive = await Subscription.findOne({
 		studentId,
-		planId,
 		status: "active",
 	});
 
 	if (existingActive) {
-		throw new ApiError(
-			"You already have an active subscription for this plan",
-			409,
-		);
+		throw new ApiError("You already have an active subscription", 409);
 	}
 
 	// ── 4. Open a MongoDB session and run the write operations atomically ──
@@ -74,12 +73,12 @@ const createSubscription = async ({ studentId, planId, majorId }) => {
 		session.startTransaction();
 
 		// 4a. Deduct the plan price from the student's wallet balance
-		const balanceBefore = wallet.balance;
-		const balanceAfter = balanceBefore - plan.price;
+		const balanceBefore = wallet.balanceUSD;
+		const balanceAfter = balanceBefore - plan.priceUSD;
 
 		await Wallet.findByIdAndUpdate(
 			wallet._id,
-			{ $inc: { balance: -plan.price } },
+			{ $inc: { balanceUSD: -plan.priceUSD } },
 			{ session, new: true },
 		);
 
@@ -88,24 +87,6 @@ const createSubscription = async ({ studentId, planId, majorId }) => {
 		// so we create the subscription first (within the same session) then
 		// back-reference it. Alternatively we pre-generate an ObjectId.
 		const subscriptionId = new mongoose.Types.ObjectId();
-
-		await Transaction.create(
-			[
-				{
-					wallet: wallet._id,
-					type: "debit",
-					status: "completed",
-					amount: plan.price,
-					reason: "subscription_payment",
-					referenceId: subscriptionId,
-					referenceModel: "Subscription", // extend your enum if needed
-					balanceBefore,
-					balanceAfter,
-					description: `Subscription payment for plan: ${plan.name}`,
-				},
-			],
-			{ session },
-		);
 
 		// 4c. Build subscription dates
 		const startDate = new Date();
@@ -119,14 +100,43 @@ const createSubscription = async ({ studentId, planId, majorId }) => {
 					_id: subscriptionId,
 					studentId,
 					planId,
-					majorId,
+					numberOfHours: plan.numberOfHours,
 					status: "active",
 					startDate,
-					endDate,
 					paymentStatus: "paid",
 				},
 			],
 			{ session },
+		);
+
+		await Transaction.create(
+			[
+				{
+					wallet: wallet._id,
+					type: "debit",
+					status: "completed",
+					amountUSD: plan.priceUSD,
+					reason: "subscription_payment",
+					referenceId: subscriptionId,
+					referenceModel: "Subscription", // extend your enum if needed
+					balanceBeforeUSD: balanceBefore,
+					balanceAfterUSD: balanceAfter,
+					description: `Subscription payment for plan: ${plan.name}`,
+				},
+			],
+			{ session },
+		);
+
+		await sendNotification(
+			{
+				io: req.io,
+				receivers: [studentId],
+				userType: "Student",
+				title: "Subscription Activated",
+				body: `You have successfully subscribed to the ${plan.name} plan. Your subscription is active until ${endDate.toDateString()}.`,
+				type: "subscription_created",
+			},
+			session,
 		);
 
 		await session.commitTransaction();
@@ -180,8 +190,7 @@ const getAllSubscriptions = async ({ status, studentId } = {}) => {
 	}
 
 	const subscriptions = await Subscription.find(filter)
-		.populate("planId", "name durationDays price currency")
-		.populate("majorId", "name")
+		.populate("planId", "name durationDays priceUSD")
 		.populate("studentId", "fullName email")
 		.sort({ createdAt: -1 });
 
@@ -198,8 +207,7 @@ const getAllSubscriptions = async ({ status, studentId } = {}) => {
  */
 const getSubscriptionById = async (subscriptionId, requestingUser) => {
 	const subscription = await Subscription.findById(subscriptionId)
-		.populate("planId", "name durationDays price currency")
-		.populate("majorId", "name")
+		.populate("planId", "name durationDays priceUSD")
 		.populate("studentId", "fullName email");
 
 	if (!subscription) {
@@ -225,8 +233,7 @@ const getSubscriptionById = async (subscriptionId, requestingUser) => {
  */
 const getMySubscriptions = async (studentId) => {
 	const subscriptions = await Subscription.find({ studentId })
-		.populate("planId", "name durationDays price currency")
-		.populate("majorId", "name")
+		.populate("planId", "name durationDays priceUSD")
 		.sort({ createdAt: -1 });
 
 	return subscriptions;
@@ -241,8 +248,11 @@ const getMySubscriptions = async (studentId) => {
  * @param {string} studentId  - Used to verify ownership
  * @returns {Promise<Subscription>}
  */
-const cancelSubscription = async (subscriptionId, studentId) => {
-	const subscription = await Subscription.findById(subscriptionId);
+const cancelSubscription = async (subscriptionId, studentId, req) => {
+	const subscription = await Subscription.findById(subscriptionId).populate(
+		"planId",
+		"name",
+	);
 
 	if (!subscription) {
 		throw new ApiError("Subscription not found", 404);
@@ -251,7 +261,7 @@ const cancelSubscription = async (subscriptionId, studentId) => {
 	// Ownership check — a student may only cancel their own subscription
 	if (subscription.studentId.toString() !== studentId.toString()) {
 		throw new ApiError(
-			"You are not authorised to cancel this subscription",
+			"You are not authorized to cancel this subscription",
 			403,
 		);
 	}
@@ -265,6 +275,15 @@ const cancelSubscription = async (subscriptionId, studentId) => {
 
 	subscription.status = "cancelled";
 	await subscription.save();
+
+	await sendNotification({
+		io: req.io,
+		receivers: [studentId],
+		userType: "Student",
+		title: "Subscription Cancelled",
+		body: `Your subscription to the ${subscription.planId.name} plan has been cancelled.`,
+		type: "subscription_cancelled",
+	});
 
 	return subscription;
 };

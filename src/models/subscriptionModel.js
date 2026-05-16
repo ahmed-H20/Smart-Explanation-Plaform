@@ -12,10 +12,8 @@ const subscriptionSchema = new mongoose.Schema(
 			ref: "SubscriptionPlan",
 			required: [true, "Plan ID is required"],
 		},
-		majorId: {
-			type: mongoose.Schema.Types.ObjectId,
-			ref: "Major",
-			required: [true, "Major ID is required"],
+		numberOfHours: {
+			type: Number,
 		},
 		status: {
 			type: String,
@@ -28,7 +26,6 @@ const subscriptionSchema = new mongoose.Schema(
 		},
 		endDate: {
 			type: Date,
-			required: [true, "End date is required"],
 		},
 		paymentStatus: {
 			type: String,
