@@ -39,7 +39,7 @@ const studentSchema = mongoose.Schema(
 		password: {
 			type: String,
 			required: [true, "password is required"],
-			// select: false, // important for security, not return in res
+			select: false, // important for security, not return in res
 		},
 		phoneNumber: {
 			type: String,

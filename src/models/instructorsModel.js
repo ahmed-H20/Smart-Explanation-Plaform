@@ -53,7 +53,7 @@ const instructorsSchema = mongoose.Schema(
 		password: {
 			type: String,
 			required: [true, "password is required"],
-			// select: false, // important for security, not return in res
+			select: false, // important for security, not return in res
 		},
 		active: {
 			type: Boolean,
@@ -90,7 +90,7 @@ const instructorsSchema = mongoose.Schema(
 
 // make complete image url
 const addImageURL = (doc) => {
-	if (doc.profileImage) {
+	if (doc.profileImage && !doc.profileImage.startsWith("http")) {
 		doc.profileImage = `${process.env.BASE_URL}/instructors/profileImages/${doc.profileImage}`;
 	}
 };

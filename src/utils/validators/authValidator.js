@@ -81,9 +81,35 @@ const forgetPasswordValidator = [
 		.withMessage("برجاء إدخال بريد إلكتروني صحيح"),
 ];
 
+const verifyResetCodeValidator = [
+	body("resetCode")
+		.notEmpty()
+		.withMessage("برجاء إدخال رمز التحقق")
+		.isLength({ min: 6, max: 6 })
+		.withMessage("رمز التحقق يجب أن يكون مكون من 6 أرقام"),
+	validatorMiddleware,
+];
+
+const resetPasswordValidator = [
+	body("email")
+		.notEmpty()
+		.withMessage("برجاء إدخال البريد الإلكتروني")
+		.isEmail()
+		.withMessage("برجاء إدخال بريد إلكتروني صحيح"),
+	body("newPassword")
+		.notEmpty()
+		.withMessage("برجاء إدخال كلمة المرور الجديدة")
+		.isLength({ min: 6 })
+		.withMessage("كلمة المرور الجديدة لا تقل عن 6 أرقام أو حروف"),
+	validatorMiddleware,
+];
+
 module.exports = {
 	signupInstructorValidator,
 	loginValidator,
 	forgetPasswordValidator,
 	signupStudentValidator,
+	verifyResetCodeValidator,
+	resetPasswordValidator,
 };
+
