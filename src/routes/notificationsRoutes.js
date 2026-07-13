@@ -28,10 +28,8 @@ router
 	.post(allowedTo("admin"), sendSystemNotificationToStudents);
 router.route("/me").get(getUserNotifications);
 router.route("/me/mark-all-read").patch(markAllNotificationsAsRead);
-router
-	.route("/:id")
-	.get(getNotification)
-	.patch(markNotificationAsRead)
-	.delete(deleteNotification);
+router.route("/:id").get(getNotification).delete(deleteNotification);
+
+router.route("/:id/mark-read").patch(markNotificationAsRead);
 
 module.exports = router;
