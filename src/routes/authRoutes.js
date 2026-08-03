@@ -19,6 +19,8 @@ const {
 	signupInstructorValidator,
 	forgetPasswordValidator,
 	signupStudentValidator,
+	verifyResetCodeValidator,
+	resetPasswordValidator,
 } = require("../utils/validators/authValidator");
 
 const router = express.Router();
@@ -35,6 +37,16 @@ router.post(
 	forgetPasswordValidator,
 	forgetPassword(Instructors),
 );
+router.post(
+	"/instructors/verifyResetCode",
+	verifyResetCodeValidator,
+	verifyResetCode(Instructors),
+);
+router.put(
+	"/instructors/resetPassword",
+	resetPasswordValidator,
+	resetPassword(Instructors),
+);
 
 // Student Routes
 router.post(
@@ -49,6 +61,16 @@ router.post(
 	"/students/forgetPassword",
 	forgetPasswordValidator,
 	forgetPassword(Students),
+);
+router.post(
+	"/students/verifyResetCode",
+	verifyResetCodeValidator,
+	verifyResetCode(Students),
+);
+router.put(
+	"/students/resetPassword",
+	resetPasswordValidator,
+	resetPassword(Students),
 );
 
 module.exports = router;

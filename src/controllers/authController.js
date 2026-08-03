@@ -8,6 +8,7 @@ const io = require("socket.io-client");
 const { generateToken } = require("../utils/generateToken");
 const ApiError = require("../utils/ApiError");
 const sendEmail = require("../utils/sendEmail");
+const { passwordResetTemplate } = require("../utils/emailTemplates");
 const studentModel = require("../models/studentsModel");
 const instructorModel = require("../models/instructorsModel");
 const { uploadStudentImage } = require("../middlewares/uploadFilesMiddleware");
@@ -192,12 +193,9 @@ const forgetPassword = (Model) =>
 				new ApiError(`There is no user with this email: ${req.body.email}`),
 			);
 
-		// 2- if exist generate 6 radom numbers, hash it , save in db
+		// 2- if exist generate 6 random numbers, hash it , save in db
 		// generate random 6 digits
-		const resetCode = Array.from(
-			{ length: 6 },
-			() => Math.floor(Math.random() * 9) + 1,
-		).toString();
+		const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
 		// hash 6 digits
 		const hashResetCode = crypto
 			.createHash("sha256")
@@ -207,14 +205,13 @@ const forgetPassword = (Model) =>
 		user.passResetCode = hashResetCode;
 		user.passResetCodeExpire = Date.now() + 10 * 60 * 1000; //expire in +10 min from now
 		user.passResetCodeVerified = false;
-		user.save();
+		await user.save();
 
 		// 3- send this code to email
 		await sendEmail({
-			from: "Ahmed",
-			to: "ahmedheshamahah2003@gmail.com",
-			subject: "your password reset code (valid for 10 min)",
-			message: `your code is ${resetCode.split(",").join("")}`,
+			to: user.email,
+			subject: "رمز إعادة تعيين كلمة المرور | Password Reset Code",
+			html: passwordResetTemplate(resetCode, user.fullName || user.email),
 		});
 
 		// 4- send res
@@ -232,7 +229,7 @@ const verifyResetCode = (Model) =>
 		// 1- take reset code , hash it , compare with db rest code
 		const hashResetCode = crypto
 			.createHash("sha256")
-			.update(req.body.resetCode.split("").join(","))
+			.update(req.body.resetCode.toString())
 			.digest("hex");
 		const user = await Model.findOne({
 			passResetCode: hashResetCode,

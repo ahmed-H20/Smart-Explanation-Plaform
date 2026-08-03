@@ -5,3 +5,7 @@ node_modules
 upload
 
 .gitignore
+
+backend_issues_report.md
+
+password_reset_apidoc.json

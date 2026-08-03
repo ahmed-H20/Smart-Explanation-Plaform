@@ -222,3 +222,56 @@ exports.acceptDirectRequestTemplate = (
     </div>
   </div>
 `;
+
+exports.passwordResetTemplate = (resetCode, userName) => `
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color:#f8fafc; padding:45px 20px; direction:rtl; text-align:right;">
+  <div style="max-width:550px; margin:auto; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
+    
+    <!-- Top Decorative Gradient Bar -->
+    <div style="background: linear-gradient(135deg, #4f46e5, #6366f1); padding:35px 20px; text-align:center; color:#ffffff;">
+      <h2 style="margin:0; font-size:24px; font-weight:700; letter-spacing: -0.5px;">🔒 إعادة تعيين كلمة المرور</h2>
+      <p style="margin:8px 0 0 0; font-size:14px; color:#e0e7ff; letter-spacing: 0.5px;">Password Reset Request</p>
+    </div>
+
+    <!-- Main Content -->
+    <div style="padding:40px 35px; color:#1e293b; line-height:1.7;">
+      <p style="font-size:16px; margin-top:0;">مرحباً <strong>${userName}</strong>،</p>
+
+      <p style="font-size:15px; color:#475569;">
+        لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك على <strong>منصة Smart Explanation</strong>. يرجى استخدام رمز التحقق التالي لإتمام العملية:
+      </p>
+      
+      <!-- Code Display Block -->
+      <div style="background:#f1f5f9; border: 1px dashed #cbd5e1; padding:25px; border-radius:12px; margin:30px 0; text-align:center;">
+        <span style="font-family: 'Courier New', Courier, monospace; font-size:36px; font-weight:bold; letter-spacing:8px; color:#4f46e5; display:inline-block;">${resetCode}</span>
+        <p style="margin:8px 0 0 0; font-size:12px; color:#64748b;">هذا الرمز صالح لمدة 10 دقائق فقط</p>
+      </div>
+
+      <p style="font-size:14px; color:#64748b; background-color:#fffbeb; border-right: 4px solid #f59e0b; padding:12px 16px; border-radius:4px; margin-bottom:30px;">
+        ⚠️ <strong>تنبيه:</strong> إذا لم تقم بطلب إعادة تعيين كلمة المرور، يمكنك تجاهل هذا البريد الإلكتروني بأمان وسيظل حسابك آمناً.
+      </p>
+
+      <hr style="border:0; border-top: 1px solid #f1f5f9; margin:30px 0;" />
+
+      <!-- English Section -->
+      <div style="direction:ltr; text-align:left; font-size:14px; color:#64748b; line-height:1.6;">
+        <p style="margin-top:0;">Hello <strong>${userName}</strong>,</p>
+        <p>
+          We received a request to reset your password for your <strong>Smart Explanation Platform</strong> account. Use the verification code above to complete your reset. This code is valid for 10 minutes.
+        </p>
+        <p style="font-size:12px; color:#94a3b8; margin-top:15px;">
+          If you did not request a password reset, please ignore this email.
+        </p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f8fafc; padding:20px; text-align:center; font-size:12px; color:#94a3b8; border-top: 1px solid #f1f5f9;">
+      <p style="margin:0;">منصة Smart Explanation © ${new Date().getFullYear()}</p>
+      <p style="margin:4px 0 0 0; font-size:11px; color:#cbd5e1;">All rights reserved.</p>
+    </div>
+
+  </div>
+</div>
+`;
+

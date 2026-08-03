@@ -15,7 +15,18 @@ const fieldIdFromNestedRoute = (req, res, next) => {
 };
 // Nested route middleware
 const filterObject = (req, res, next) => {
-	const findObject = req.params.fieldId ? { field: req.params.fieldId } : {};
+	let findObject = {};
+
+	// Priority 1: nested route param (e.g. /fields/:fieldId/majors)
+	if (req.params.fieldId) {
+		findObject = { field: req.params.fieldId };
+	}
+	// Priority 2: query string ?field=<ObjectId> — treat as a DB filter, NOT a field projection
+	else if (req.query.field) {
+		findObject = { field: req.query.field };
+		// Remove from query so ApiFeatures.limitation() doesn't use it as a Mongoose select()
+		delete req.query.field;
+	}
 
 	req.findObject = findObject;
 	next();
