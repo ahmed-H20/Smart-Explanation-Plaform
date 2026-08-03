@@ -2,6 +2,7 @@ require("dotenv").config({ path: ".env" });
 const path = require("path");
 const express = require("express");
 const { Server } = require("socket.io");
+const cors = require("cors");
 const http = require("http");
 const morgan = require("morgan");
 const socketInit = require("./src/socket");
@@ -33,6 +34,12 @@ const { responseFormatter } = require("./src/middlewares/responseFormatter");
 // Create app
 const app = express();
 const server = http.createServer(app);
+
+app.use(
+	cors({
+		origin: "http://localhost:5173",
+	}),
+);
 
 // Real-time with socket.io
 const io = new Server(server, {
