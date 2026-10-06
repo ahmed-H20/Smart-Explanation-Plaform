@@ -18,11 +18,10 @@ const {
 
 const router = express.Router({ mergeParams: true }); //to make nested routing
 
-router.use(protect());
-
 router
 	.route("/")
 	.post(
+		protect(),
 		allowedTo("admin"),
 		fieldIdFromNestedRoute,
 		createMajorValidator,
@@ -31,8 +30,8 @@ router
 	.get(filterObject, getAllMajor);
 router
 	.route("/:id")
-	.get(getMajorIdValidator, getMajorById)
-	.patch(allowedTo("admin"), updateMajorValidator, updateMajor)
+	.get(protect(), getMajorIdValidator, getMajorById)
+	.patch(protect(), allowedTo("admin"), updateMajorValidator, updateMajor)
 	.delete(allowedTo("admin"), getMajorIdValidator, deleteMajor);
 
 module.exports = router;

@@ -73,10 +73,6 @@ const login = (Model) =>
 		// 4- Generate token
 		const token = generateToken({ id: user._id });
 
-		const socket = io(process.env.BASE_URL, {
-			auth: { token },
-		});
-
 		// 5- send res
 		res
 			.cookie("token", token, {

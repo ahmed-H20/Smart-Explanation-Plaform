@@ -16,16 +16,14 @@ const {
 
 const router = express.Router();
 
-router.use(protect());
-
 router
 	.route("/")
-	.post(allowedTo("admin"), createCountryValidator, createCountry)
+	.post(protect(), allowedTo("admin"), createCountryValidator, createCountry)
 	.get(getAllCountry);
 router
 	.route("/:id")
 	.get(countryIdValidator, getCountryById)
-	.patch(updateCountryValidator, allowedTo("admin"), updateCountry)
-	.delete(allowedTo("admin"), countryIdValidator, deleteCountry);
+	.patch(protect(), allowedTo("admin"), updateCountryValidator, updateCountry)
+	.delete(protect(), allowedTo("admin"), countryIdValidator, deleteCountry);
 
 module.exports = router;
